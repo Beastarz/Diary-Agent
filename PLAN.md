@@ -10,11 +10,13 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 |---|---|
 | M0 Setup | ✅ done |
 | M1 Plain LangChain chat | ✅ done |
-| M2 Structured entries | ⏭ next |
-| M3–M8 | todo |
+| M2 Structured entries | ✅ done |
+| M3 LangGraph conversion | ⏭ next |
+| M4–M8 | todo |
 
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
+- **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `scripts/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
 
 ## Stack
 - **LLM**: Ollama `llama3.1:8b` (default). `qwen3:8b` is also pulled, for comparisons and tool calling. Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
@@ -34,8 +36,10 @@ diary_agent/
     llm.py             # get_chat_model(), get_embeddings()    (exists)
     prompts.py         # system prompts, versioned             (exists)
     chat.py            # M1 LCEL chain + ChatSession           (exists; superseded by graph in M3)
-    cli.py             # `diary chat` (exists), `summary`, `list`
-    db.py              # SQLite entries repo (create/get/list_by_range)
+    cli.py             # `diary chat` (/save), `list`, `show`  (exists); `summary` in M5
+    entry.py           # ExtractedEntry / JournalEntry schemas (exists)
+    extract.py         # structured extraction + retries + guardrails (exists)
+    db.py              # SQLite entries repo                   (exists)
     vectorstore.py     # Chroma index: add_entry(), search()
     memory.py          # long-term user-facts store (LangGraph BaseStore, SQLite-backed)
     tools.py           # @tool: save_entry, search_entries, get_entries_by_date, remember_fact

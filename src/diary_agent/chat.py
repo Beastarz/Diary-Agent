@@ -32,6 +32,7 @@ class ChatSession:
     def __init__(self, model: BaseChatModel):
         self.chain = build_chain(model)
         self.history: list[BaseMessage] = []
+        self.saved_turns = 0  # len(history) at last save; lets the CLI detect unsaved chat
 
     def stream(self, user_input: str):
         """Yield reply chunks, then record the full turn in history."""
@@ -41,3 +42,10 @@ class ChatSession:
             reply += chunk
             yield chunk
         self.history += [HumanMessage(user_input), AIMessage(reply)]
+
+    @property
+    def has_unsaved(self) -> bool:
+        return len(self.history) > self.saved_turns
+
+    def mark_saved(self) -> None:
+        self.saved_turns = len(self.history)

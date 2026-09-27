@@ -13,7 +13,10 @@ copy .env.example .env   # optional: change model etc.
 
 ## Use
 ```powershell
-uv run diary chat                  # talk to your journal
+uv run diary chat                  # talk to your journal; type /save to write today's entry
+uv run diary list                  # recent entries
+uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat)
+uv run python scripts/extract_probe.py   # mini eval of entry extraction (needs Ollama)
 uv run pytest                      # unit tests (no Ollama needed)
 uv run python scripts/smoke.py     # check Ollama connectivity
 ```
@@ -21,7 +24,7 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 ## Roadmap
 - [x] M0 Setup: Ollama, uv, model factories
 - [x] M1 Plain LangChain chat (LCEL, in-memory history)
-- [ ] M2 Structured journal entries + SQLite
+- [x] M2 Structured journal entries + SQLite
 - [ ] M3 LangGraph: state graph, checkpointing, human-in-the-loop
 - [ ] M4 Tools + RAG over past entries
 - [ ] M5 Weekly/monthly summaries
