@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+# Your journal is private - never commit it
+data/
+evals/results/
