@@ -5,8 +5,8 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
-from diary_agent.config import settings
-from diary_agent.entry import JournalEntry
+from diary_agent.core.config import settings
+from diary_agent.journal.entry import JournalEntry
 
 LIST_FIELDS = ("mood_words", "highlights", "challenges", "gratitude", "tags")
 

@@ -3,7 +3,7 @@
 
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-from diary_agent.config import settings
+from diary_agent.core.config import settings
 
 
 def get_chat_model(temperature: float | None = None, max_tokens: int | None = None) -> ChatOllama:

@@ -6,19 +6,19 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
-from diary_agent import db
-from diary_agent.chat import ChatSession
-from diary_agent.config import settings
-from diary_agent.entry import ExtractedEntry, JournalEntry
-from diary_agent.extract import (
+from diary_agent.journal import db
+from diary_agent.chat.session import ChatSession
+from diary_agent.core.config import settings
+from diary_agent.journal.entry import ExtractedEntry, JournalEntry
+from diary_agent.journal.extract import (
     ExtractionError,
     build_extractor,
     extract_entry,
     format_transcript,
     get_extraction_model,
 )
-from diary_agent.llm import get_chat_model
-from diary_agent.prompts import PROMPT_VERSION
+from diary_agent.core.llm import get_chat_model
+from diary_agent.core.prompts import PROMPT_VERSION
 
 app = typer.Typer(help="Local-first chat journal agent.", no_args_is_help=True)
 console = Console()

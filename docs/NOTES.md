@@ -1,7 +1,7 @@
 # Learning notes
 
 ## M0: Chat models, messages, streaming
-- **Where to look:** `src/diary_agent/llm.py`, `scripts/smoke.py`
+- **Where to look:** `core/llm.py`, `scripts/smoke.py`
 - A LangChain **chat model** (`ChatOllama`) takes a list of **messages** (`SystemMessage`, `HumanMessage`, `AIMessage`) and returns an `AIMessage`.
 - `.invoke()` returns the whole reply. `.stream()` yields chunks as they are generated.
 - Keep model creation in one factory (`get_chat_model`). The rest of the app depends only on the `BaseChatModel` interface, so switching models or providers is a config change.
@@ -9,7 +9,7 @@
 - **Embeddings** turn text into vectors (768 dims for nomic-embed-text). M4 uses them for semantic search.
 
 ## M1: LCEL and chat history
-- **Where to look:** `src/diary_agent/chat.py`, `cli.py`, `tests/test_chat.py`
+- **Where to look:** `chat/session.py`, `cli.py`, `tests/chat/test_session.py`
 - `prompt | model | parser` is **LCEL**. Each piece is a `Runnable`, and `|` chains them. Every Runnable gets `invoke / stream / batch` for free.
 - `ChatPromptTemplate` fills `{today}` and `{input}`. `MessagesPlaceholder("history")` slots in the prior messages.
 - **The model is stateless.** It remembers nothing between calls, so "memory" just means resending the history each time. Our `ChatSession` keeps it in a Python list, and it is lost when the process exits. M3 fixes that with a LangGraph checkpointer.
@@ -39,7 +39,7 @@ This was a tiny **eval**: fixed inputs, a deterministic checker, several repeats
 - Chat for 30+ turns. The history grows without limit. What happens to speed? (Hint: context window. M3/M6 handle trimming.)
 
 ## M2: Structured output, schema design, guardrails
-- **Where to look:** `entry.py` (schemas), `extract.py` (extraction + retries + guardrails), `db.py`, `cli.py` (`/save`, `list`, `show`), `scripts/extract_probe.py` (mini eval)
+- **Where to look:** `journal/entry.py` (schemas), `journal/extract.py` (extraction + retries + guardrails), `journal/db.py`, `cli.py` (`/save`, `list`, `show`), `evals/extract_probe.py` (mini eval)
 - `model.with_structured_output(Schema, method="json_schema", include_raw=True)` returns a Runnable that outputs `{"raw", "parsed", "parsing_error"}`. `include_raw` lets us see *why* parsing failed and feed that back to the model for a retry.
 - **Two schemas:** `ExtractedEntry` holds what the LLM must infer. `JournalEntry` adds what code already knows: date, transcript, model, prompt version. Never ask a model for something you can compute.
 - **Human confirmation before writing:** `/save` shows the entry and asks y/n. Saving the same day again asks before overwriting.
@@ -76,7 +76,7 @@ Lessons:
 6. **100% means the eval is too easy, not that the model is perfect.** The probe still misses things: "8 out of 10" listed as a *highlight*, and a `work` tag on a dentist trip. M7 needs harder cases and checks on tags and highlights.
 
 ### Try this
-- `uv run python scripts/extract_probe.py --model qwen3:8b`: how does it compare?
+- `uv run python evals/extract_probe.py --model qwen3:8b`: how does it compare?
 - Remove `max_length` from `tags` and rerun `gratitude_only` (be ready to Ctrl+C).
 - Write a case you think will fail, e.g. sarcasm: "Oh *great*, another Monday." Does the mood come out right?
 - `uv run diary show --transcript` to see what was stored alongside the entry.

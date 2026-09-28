@@ -16,7 +16,7 @@ copy .env.example .env   # optional: change model etc.
 uv run diary chat                  # talk to your journal; type /save to write today's entry
 uv run diary list                  # recent entries
 uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat)
-uv run python scripts/extract_probe.py   # mini eval of entry extraction (needs Ollama)
+uv run python evals/extract_probe.py   # mini eval of entry extraction (needs Ollama)
 uv run pytest                      # unit tests (no Ollama needed)
 uv run python scripts/smoke.py     # check Ollama connectivity
 ```
@@ -31,4 +31,4 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 - [ ] M6 Long-term memory about you
 - [ ] M7 Evals: component, retrieval, trajectory, LLM-as-judge, simulated users
 
-See `PLAN.md` for the full design and `NOTES.md` for what each milestone teaches.
+See [`docs/PLAN.md`](docs/PLAN.md) for the full design and [`docs/NOTES.md`](docs/NOTES.md) for what each milestone teaches.

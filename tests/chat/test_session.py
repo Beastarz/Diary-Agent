@@ -2,7 +2,7 @@
 
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-from diary_agent.chat import ChatSession
+from diary_agent.chat.session import ChatSession
 
 
 def test_session_records_history():

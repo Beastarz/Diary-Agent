@@ -9,9 +9,9 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 
-from diary_agent.entry import ExtractedEntry
-from diary_agent.llm import get_chat_model
-from diary_agent.prompts import EXTRACT_SYSTEM
+from diary_agent.journal.entry import ExtractedEntry
+from diary_agent.core.llm import get_chat_model
+from diary_agent.core.prompts import EXTRACT_SYSTEM
 
 
 class ExtractionError(Exception):

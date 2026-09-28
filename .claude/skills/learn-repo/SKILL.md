@@ -12,8 +12,8 @@ The user is learning AI agents (LangChain, LangGraph, tools, memory, evals) by b
 | File | Owner | Purpose |
 |---|---|---|
 | `LEARNINGS.md` (this skill's folder) | you (the AI) | Code map, concept index, decision log, learner progress. Your memory of the repo. |
-| `NOTES.md` (repo root) | the user | Per-milestone narrative: experiments, eval tables, "try this". Read it, link to it, but don't rewrite it unless asked. |
-| `PLAN.md` (repo root) | the user | Roadmap and milestone status. Source of truth for what's done and what's next. |
+| `docs/NOTES.md` | the user | Per-milestone narrative: experiments, eval tables, "try this". Read it, link to it, but don't rewrite it unless asked. |
+| `docs/PLAN.md` | the user | Roadmap and milestone status. Source of truth for what's done and what's next. |
 
 Don't copy NOTES.md into LEARNINGS.md. Point to it ("see NOTES.md → M2 → eval loop") and keep LEARNINGS.md about *where things live in the code and why*.
 

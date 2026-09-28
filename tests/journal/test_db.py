@@ -1,7 +1,7 @@
 from datetime import date
 
-from diary_agent import db
-from diary_agent.entry import JournalEntry
+from diary_agent.journal import db
+from diary_agent.journal.entry import JournalEntry
 
 
 def make_entry(day: date, mood: int | None = 7) -> JournalEntry:

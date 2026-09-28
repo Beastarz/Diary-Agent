@@ -16,7 +16,7 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
-- **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `scripts/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
+- **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `evals/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
 
 ## Stack
 - **LLM**: Ollama `llama3.1:8b` (default). `qwen3:8b` is also pulled, for comparisons and tool calling. Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
@@ -26,36 +26,45 @@ Change log:
 - **Storage (all under `./data/`, git-ignored)**: `journal.db` (SQLite: entries table), `checkpoints.db` (LangGraph conversation state), `chroma/` (entry embeddings), `store.db` (long-term user memory).
 - No cloud calls anywhere. LangSmith tracing is off by default; local tracing uses LangGraph's streaming plus a simple JSONL trace logger.
 
-## Project layout (target)
+## Project layout
+Grouped by concern. `✓` = exists, the rest is the target for later milestones.
 ```
 diary_agent/
-  pyproject.toml  .env.example  README.md  NOTES.md  PLAN.md
-  scripts/smoke.py     # Ollama connectivity check            (exists)
+  README.md  pyproject.toml  .env.example
+  docs/
+    PLAN.md              ✓ this file: roadmap + status
+    NOTES.md             ✓ per-milestone learning notes
   src/diary_agent/
-    config.py          # model names, paths, env               (exists)
-    llm.py             # get_chat_model(), get_embeddings()    (exists)
-    prompts.py         # system prompts, versioned             (exists)
-    chat.py            # M1 LCEL chain + ChatSession           (exists; superseded by graph in M3)
-    cli.py             # `diary chat` (/save), `list`, `show`  (exists); `summary` in M5
-    entry.py           # ExtractedEntry / JournalEntry schemas (exists)
-    extract.py         # structured extraction + retries + guardrails (exists)
-    db.py              # SQLite entries repo                   (exists)
-    vectorstore.py     # Chroma index: add_entry(), search()
-    memory.py          # long-term user-facts store (LangGraph BaseStore, SQLite-backed)
-    tools.py           # @tool: save_entry, search_entries, get_entries_by_date, remember_fact
-    graph/
-      state.py         # JournalState (messages, mode, draft_entry, ...)
-      nodes.py         # router, checkin, chat_agent, summarize, extract_entry, update_memory
-      build.py         # StateGraph wiring + checkpointer + store
-  evals/
-    datasets/*.jsonl   # hand-written cases
-    evaluators.py      # deterministic + trajectory + LLM-as-judge
-    run_evals.py       # runs graph over datasets, writes evals/results/<ts>.json
-  tests/               # plain unit tests using FakeListChatModel (no Ollama needed)
+    cli.py               ✓ `diary chat` (/save), `list`, `show`; `summary` in M5
+    core/                shared infrastructure
+      config.py          ✓ settings from env/.env
+      llm.py             ✓ get_chat_model(), get_embeddings()
+      prompts.py         ✓ system prompts + PROMPT_VERSION
+    chat/                conversation layer
+      session.py         ✓ M1 LCEL chain + ChatSession (superseded by graph/ in M3)
+      graph/             M3: state.py, nodes.py, build.py (StateGraph + checkpointer + store)
+    journal/             the entry domain
+      entry.py           ✓ ExtractedEntry / JournalEntry schemas
+      extract.py         ✓ structured extraction + retries + guardrails
+      db.py              ✓ SQLite entries repo
+      vectorstore.py     M4: Chroma index, add_entry(), search()
+      summarize.py       M5: map-reduce summaries
+    agent/
+      tools.py           M4: @tool save_entry, search_entries, get_entries_by_date, remember_fact
+      memory.py          M6: long-term user facts (LangGraph BaseStore)
+  evals/                 needs Ollama; measures model quality
+    extract_probe.py     ✓ M2 mini eval (7 cases)
+    datasets/*.jsonl     M7: hand-written cases
+    evaluators.py        M7: deterministic + trajectory + LLM-as-judge
+    run_evals.py         M7: writes evals/results/<ts>.json
+  scripts/
+    smoke.py             ✓ Ollama connectivity check
+  tests/                 no Ollama; FakeListChatModel / scripted fakes; mirrors src/
+    chat/  journal/      ✓
 ```
 
 ## Milestones
-Each milestone ends runnable. Append a NOTES.md section (concepts, what to try, gotchas) and tick it off in README + this file.
+Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to try, gotchas) and tick it off in README + this file.
 
 **M0 — Setup. ✅** Ollama, uv, deps, `config.py`, `llm.py`, smoke script.
 *Learn:* chat models, messages, streaming.

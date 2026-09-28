@@ -2,7 +2,7 @@
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from diary_agent.llm import get_chat_model, get_embeddings
+from diary_agent.core.llm import get_chat_model, get_embeddings
 
 model = get_chat_model()
 messages = [SystemMessage("Reply in one short sentence."), HumanMessage("Say hi to a new journaler.")]

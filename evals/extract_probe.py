@@ -1,6 +1,6 @@
 """M2 mini eval: how good is entry extraction on the real model?
 
-Run: uv run python scripts/extract_probe.py [--runs 3] [--model llama3.1:8b]
+Run: uv run python evals/extract_probe.py [--runs 3] [--model llama3.1:8b]
 
 Each case has a transcript and expectations. Checks are deterministic (no LLM judge yet):
 - valid:          extraction succeeded
@@ -113,8 +113,8 @@ def main():
         os.environ["DIARY_CHAT_MODEL"] = args.model
 
     # Imported after setting the env var so config picks it up.
-    from diary_agent.config import settings
-    from diary_agent.extract import ExtractionError, build_extractor, extract_entry, get_extraction_model
+    from diary_agent.core.config import settings
+    from diary_agent.journal.extract import ExtractionError, build_extractor, extract_entry, get_extraction_model
 
     extractor = build_extractor(get_extraction_model())
     totals: dict[str, list[bool]] = defaultdict(list)

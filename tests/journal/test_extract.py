@@ -4,8 +4,8 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableLambda
 
-from diary_agent.entry import ExtractedEntry
-from diary_agent.extract import ExtractionError, apply_guardrails, extract_entry, format_transcript
+from diary_agent.journal.entry import ExtractedEntry
+from diary_agent.journal.extract import ExtractionError, apply_guardrails, extract_entry, format_transcript
 
 GOOD = ExtractedEntry(
     highlights=[], challenges=[], gratitude=[], mood_words=[], mood=6, tags=["misc"], summary="You had an ok day."

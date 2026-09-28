@@ -12,7 +12,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable
 
-from diary_agent.prompts import COMPANION_SYSTEM
+from diary_agent.core.prompts import COMPANION_SYSTEM
 
 
 def build_chain(model: BaseChatModel) -> Runnable:
