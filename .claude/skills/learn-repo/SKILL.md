@@ -1,6 +1,6 @@
 ---
 name: learn-repo
-description: Teach the user how this diary-agent repo works and what AI-agent concepts it demonstrates, using a persistent knowledge file (LEARNINGS.md) instead of rescanning the codebase. Use this skill whenever the user wants to understand or learn from the repo, e.g. "explain how extraction works", "what does db.py do", "what did I learn in M2", "give me learning points", "quiz me", "walk me through the flow", "where is X handled", "why did we do Y". Also use it after a milestone, commit, or significant code change to update the learnings ("update learnings", "sync the notes", "I just finished M3"), even if the user doesn't name the skill.
+description: Teach the user how this diary-agent repo works and what AI-agent concepts it demonstrates, using a persistent knowledge file (LEARNINGS.md) instead of rescanning the codebase. Use this skill whenever the user wants to understand or learn from the repo, e.g. "explain how extraction works", "what does entry_repository.py do", "what did I learn in M2", "give me learning points", "quiz me", "walk me through the flow", "where is X handled", "why did we do Y". Also use it after a milestone, commit, or significant code change to update the learnings ("update learnings", "sync the notes", "I just finished M3"), even if the user doesn't name the skill.
 ---
 
 # Learn the repo
@@ -31,14 +31,14 @@ git ls-files --others --exclude-standard            # new untracked files
 
 - **No relevant changes:** answer from LEARNINGS.md. Open a source file only when the answer needs actual code (a snippet, an exact signature, a subtle detail). Then open just that file, or a targeted Grep, never a sweep.
 - **Changed files:** read only those files (and `git diff <last_synced_commit> -- <file>` if the full file is big). Update LEARNINGS.md (Step 3) before or while answering, so the next session benefits.
-- **Missing or unreadable `last_synced_commit`** (e.g. history rewritten): fall back to reading only the files listed in the File map plus anything new from `git ls-files src scripts tests evals`, then resync.
+- **Missing or unreadable `last_synced_commit`** (e.g. history rewritten): fall back to reading only the files listed in the File map plus anything new from `git ls-files backend scripts evals frontend`, then resync.
 
 Ignore changes to `uv.lock`, `.gitignore`, `data/`, and caches. They don't carry learning value.
 
 ## Step 2: Do what the user asked
 
 ### "Explain X" / "How does X work?" / "Where is X?"
-Answer in terms of this repo: name the file and the symbol (`extract.py → apply_guardrails()`), then explain the general concept it illustrates, then the *why* (the design decision or the bug that motivated it). The user wants transferable understanding. "This is how LangChain structured output works, and here's the gotcha we hit" beats a line-by-line walkthrough.
+Answer in terms of this repo: name the file and the symbol (`services/extraction.py → apply_guardrails()`), then explain the general concept it illustrates, then the *why* (the design decision or the bug that motivated it). The user wants transferable understanding. "This is how LangChain structured output works, and here's the gotcha we hit" beats a line-by-line walkthrough.
 
 Use symbol names rather than line numbers when writing into LEARNINGS.md, because line numbers go stale with every edit. In a chat answer, `file:line` is fine because it's clickable right now.
 

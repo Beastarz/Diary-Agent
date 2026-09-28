@@ -17,50 +17,61 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
 - **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `evals/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
+- **Structure (2026-09-28):** moved to a full-stack layout: `backend/` (layered `core / models / repositories / services / cli / api`) + `frontend/` placeholder, with the root as a uv workspace. See Project layout below.
 
 ## Stack
 - **LLM**: Ollama `llama3.1:8b` (default). `qwen3:8b` is also pulled, for comparisons and tool calling. Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
 - **Embeddings**: Ollama `nomic-embed-text` (768 dims).
 - **Libraries**: `langchain-core`, `langchain-ollama`, `langgraph`, `langgraph-checkpoint-sqlite`, `langchain-chroma` (local vector store), `pydantic`, `rich` + `typer` (CLI), `pytest`, `openevals` / `agentevals` (to add in M7).
-- **Packaging**: `uv` with `pyproject.toml`; CLI entry point `diary = diary_agent.cli:app`.
+- **Packaging**: `uv` workspace. Root `pyproject.toml` holds dev tools + pytest config; `backend/pyproject.toml` is the `diary-agent` package with CLI entry point `diary = diary_agent.cli.app:app`.
 - **Storage (all under `./data/`, git-ignored)**: `journal.db` (SQLite: entries table), `checkpoints.db` (LangGraph conversation state), `chroma/` (entry embeddings), `store.db` (long-term user memory).
 - No cloud calls anywhere. LangSmith tracing is off by default; local tracing uses LangGraph's streaming plus a simple JSONL trace logger.
 
 ## Project layout
-Grouped by concern. `✓` = exists, the rest is the target for later milestones.
+Traditional full-stack layout: `backend/` + `frontend/`, and a layered backend. `✓` = exists; the rest shows where later milestones' files go.
+
+Layer rule: `cli/`, `api/` → `services/` → `repositories/` → `models/`. `core/` is usable from anywhere. Nothing imports "upward".
+
 ```
-diary_agent/
-  README.md  pyproject.toml  .env.example
-  docs/
-    PLAN.md              ✓ this file: roadmap + status
-    NOTES.md             ✓ per-milestone learning notes
-  src/diary_agent/
-    cli.py               ✓ `diary chat` (/save), `list`, `show`; `summary` in M5
-    core/                shared infrastructure
-      config.py          ✓ settings from env/.env
-      llm.py             ✓ get_chat_model(), get_embeddings()
-      prompts.py         ✓ system prompts + PROMPT_VERSION
-    chat/                conversation layer
-      session.py         ✓ M1 LCEL chain + ChatSession (superseded by graph/ in M3)
-      graph/             M3: state.py, nodes.py, build.py (StateGraph + checkpointer + store)
-    journal/             the entry domain
-      entry.py           ✓ ExtractedEntry / JournalEntry schemas
-      extract.py         ✓ structured extraction + retries + guardrails
-      db.py              ✓ SQLite entries repo
-      vectorstore.py     M4: Chroma index, add_entry(), search()
-      summarize.py       M5: map-reduce summaries
-    agent/
-      tools.py           M4: @tool save_entry, search_entries, get_entries_by_date, remember_fact
-      memory.py          M6: long-term user facts (LangGraph BaseStore)
-  evals/                 needs Ollama; measures model quality
-    extract_probe.py     ✓ M2 mini eval (7 cases)
-    datasets/*.jsonl     M7: hand-written cases
-    evaluators.py        M7: deterministic + trajectory + LLM-as-judge
-    run_evals.py         M7: writes evals/results/<ts>.json
+diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .venv
+  README.md
+  backend/
+    pyproject.toml               ✓ package `diary-agent`, `diary` CLI entry point
+    .env.example                 ✓ copy to backend/.env
+    src/diary_agent/
+      core/                      infrastructure used by every layer
+        config.py                ✓ settings from env/.env
+        llm.py                   ✓ get_chat_model(), get_embeddings()
+        prompts.py               ✓ system prompts + PROMPT_VERSION
+      models/                    pydantic data models only (no logic, no I/O)
+        entry.py                 ✓ ExtractedEntry / JournalEntry
+        summary.py               M5
+        memory.py                M6: user facts
+      repositories/              data access; the only place with SQL / vector DB calls
+        entry_repository.py      ✓ SQLite entries (connect, save_entry, get_entry, list_entries)
+        vector_repository.py     M4: Chroma index (add, search)
+        memory_repository.py     M6: LangGraph BaseStore wrapper
+      services/                  business logic
+        chat.py                  ✓ M1 LCEL chain + ChatSession (replaced by agent/ in M3)
+        extraction.py            ✓ structured extraction + retries + guardrails
+        summary.py               M5: map-reduce summaries
+        agent/                   M3+: LangGraph agent
+          state.py  nodes.py  graph.py   M3: StateGraph + checkpointer + interrupt()
+          tools.py               M4: @tool search_entries, get_entries_by_date, save_entry, remember_fact
+      cli/
+        app.py                   ✓ `diary chat` (/save), `list`, `show`; `summary` in M5
+      api/                       HTTP API for the frontend (FastAPI, when a UI is built)
+    tests/                       no Ollama; fakes; mirrors src/
+      services/  repositories/   ✓
+  frontend/                      placeholder for a future web UI
+  evals/                         needs Ollama; measures model quality
+    extract_probe.py             ✓ M2 mini eval (7 cases)
+    datasets/*.jsonl  evaluators.py  run_evals.py   M7
   scripts/
-    smoke.py             ✓ Ollama connectivity check
-  tests/                 no Ollama; FakeListChatModel / scripted fakes; mirrors src/
-    chat/  journal/      ✓
+    smoke.py                     ✓ Ollama connectivity check
+  docs/
+    PLAN.md                      ✓ this file: roadmap + status
+    NOTES.md                     ✓ per-milestone learning notes
 ```
 
 ## Milestones
@@ -72,7 +83,7 @@ Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to 
 **M1 — Plain LangChain chat. ✅** `prompt | model` chain with a journaling-companion system prompt and in-memory history; CLI loop.
 *Learn:* LCEL, prompt templates, why chat history must be managed explicitly.
 
-**M2 — Structured entries.** `extract_entry` uses `model.with_structured_output(JournalEntry)` (pydantic: date, mood 1–10, mood_words, highlights, challenges, gratitude, tags, summary). Persist to SQLite via `db.py`.
+**M2 — Structured entries.** `extract_entry` uses `model.with_structured_output(JournalEntry)` (pydantic: date, mood 1–10, mood_words, highlights, challenges, gratitude, tags, summary). Persist to SQLite via `repositories/entry_repository.py`.
 *Learn:* structured output, schema design, validation/retry for small models.
 
 **M3 — LangGraph conversion.** Rebuild as a `StateGraph`: `router → {checkin | chat_agent | summarize}`. The guided check-in is a small sub-flow: ask a few reflective questions, then `extract_entry` → human confirmation via `interrupt()` → save. The `SqliteSaver` checkpointer uses thread_id = date, so you can resume today's conversation.
@@ -103,7 +114,7 @@ Results are saved as JSON with prompt version + model name, so runs can be compa
 - Deterministic code where possible; LLM only where judgment is needed (router can start rule-based + LLM fallback).
 - Few, well-described tools with narrow arg schemas; validate tool inputs; return concise tool outputs.
 - Human confirmation before writing an entry or a memory.
-- Prompts versioned in `prompts.py` (`PROMPT_VERSION`); every eval run records versions.
+- Prompts versioned in `core/prompts.py` (`PROMPT_VERSION`); every eval run records versions.
 - Graceful degradation when the 8B model fails structured output (retry with error feedback, then fallback).
 - Privacy: everything in `./data/`, git-ignored.
 

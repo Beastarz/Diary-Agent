@@ -6,19 +6,19 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
-from diary_agent.journal import db
-from diary_agent.chat.session import ChatSession
 from diary_agent.core.config import settings
-from diary_agent.journal.entry import ExtractedEntry, JournalEntry
-from diary_agent.journal.extract import (
+from diary_agent.core.llm import get_chat_model
+from diary_agent.core.prompts import PROMPT_VERSION
+from diary_agent.models.entry import ExtractedEntry, JournalEntry
+from diary_agent.repositories import entry_repository as entry_repo
+from diary_agent.services.chat import ChatSession
+from diary_agent.services.extraction import (
     ExtractionError,
     build_extractor,
     extract_entry,
     format_transcript,
     get_extraction_model,
 )
-from diary_agent.core.llm import get_chat_model
-from diary_agent.core.prompts import PROMPT_VERSION
 
 app = typer.Typer(help="Local-first chat journal agent.", no_args_is_help=True)
 console = Console()
@@ -53,8 +53,8 @@ def save_flow(session: ChatSession) -> None:
             return
     console.print(render_entry(extracted, today))
 
-    conn = db.connect()
-    if db.get_entry(conn, today) and not Confirm.ask("An entry for today already exists. Overwrite it?"):
+    conn = entry_repo.connect()
+    if entry_repo.get_entry(conn, today) and not Confirm.ask("An entry for today already exists. Overwrite it?"):
         return
     if not Confirm.ask("Save this entry?"):
         return
@@ -65,7 +65,7 @@ def save_flow(session: ChatSession) -> None:
         model=settings.chat_model,
         prompt_version=PROMPT_VERSION,
     )
-    db.save_entry(conn, entry)
+    entry_repo.save_entry(conn, entry)
     session.mark_saved()
     console.print("[green]Saved.[/green]")
 
@@ -107,7 +107,7 @@ def chat():
 @app.command("list")
 def list_cmd(limit: int = typer.Option(10, help="How many recent entries to show.")):
     """List recent entries."""
-    entries = db.list_entries(db.connect(), limit=limit)
+    entries = entry_repo.list_entries(entry_repo.connect(), limit=limit)
     if not entries:
         console.print("[dim]No entries yet. Run 'diary chat' and type /save.[/dim]")
         return
@@ -122,7 +122,7 @@ def show(day: str = typer.Argument(None, help="YYYY-MM-DD (default: today)"),
          transcript: bool = typer.Option(False, "--transcript", help="Also print the conversation.")):
     """Show one entry."""
     target = date.fromisoformat(day) if day else date.today()
-    entry = db.get_entry(db.connect(), target)
+    entry = entry_repo.get_entry(entry_repo.connect(), target)
     if not entry:
         console.print(f"[dim]No entry for {target.isoformat()}.[/dim]")
         raise typer.Exit(1)

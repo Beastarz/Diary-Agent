@@ -1,6 +1,6 @@
 # Repo learnings (AI-maintained)
 
-last_synced_commit: 4963c46 (+ uncommitted: repo restructure)
+last_synced_commit: d3363f2 (+ uncommitted: full-stack restructure)
 last_synced: 2026-09-28
 current_milestone: M2 done, M3 (LangGraph) next
 
@@ -8,44 +8,46 @@ current_milestone: M2 done, M3 (LangGraph) next
 
 ## End-to-end flow (as of M2)
 
+Layers: `cli/` → `services/` → `repositories/` → `models/`; `core/` (config, llm, prompts) is used everywhere. Paths below are under `backend/src/diary_agent/`.
+
 ```
-uv run diary chat  (src/diary_agent/cli.py → chat())
-  └─ ChatSession (chat/session.py)          in-memory history list, lost on exit
+uv run diary chat  (cli/app.py → chat())
+  └─ ChatSession (services/chat.py)          in-memory history list, lost on exit
        └─ build_chain: ChatPromptTemplate(COMPANION_SYSTEM + history + input) | ChatOllama | StrOutputParser
             └─ .stream() → chunks printed live
-  /save or exit → save_flow (cli.py)
+  /save or exit → save_flow (cli/app.py)
        ├─ format_transcript(history) → "User: … / Assistant: …" text
-       ├─ extract_entry (journal/extract.py)
+       ├─ extract_entry (services/extraction.py)
        │    ├─ model.with_structured_output(ExtractedEntry, json_schema, include_raw=True), temp 0, 512 tokens
        │    ├─ on parse failure: append raw output + error, retry (max 2 retries) → ExtractionError
        │    └─ apply_guardrails: drop non-explicit gratitude, drop mood_words not in user text
        ├─ render + Confirm (human approves every write, and any overwrite)
-       └─ JournalEntry(**extracted, date, transcript, model, prompt_version) → db.save_entry (SQLite, 1 row/day)
-uv run diary list / show → db.list_entries / get_entry
+       └─ JournalEntry(**extracted, date, transcript, model, prompt_version) → entry_repo.save_entry (repositories/entry_repository.py, SQLite, 1 row/day)
+uv run diary list / show → entry_repo.list_entries / get_entry
 ```
 
 ## File map
 
 | File | What it does | Key symbols | Concepts it teaches |
 |---|---|---|---|
-| `src/diary_agent/core/config.py` | Env/.env-driven frozen settings | `Settings`, `settings`, `PROJECT_ROOT` | Config in one place; model choice is config, not code |
-| `src/diary_agent/core/llm.py` | Model factories | `get_chat_model(temperature, max_tokens)`, `get_embeddings()` | Depend on `BaseChatModel` interface; provider swap = one file; `reasoning` flag only sent when on |
-| `src/diary_agent/core/prompts.py` | System prompts + version | `PROMPT_VERSION` (v1.4), `COMPANION_SYSTEM`, `EXTRACT_SYSTEM` | Prompt versioning so eval runs are comparable; changelog comments |
-| `src/diary_agent/chat/session.py` | M1 LCEL chat | `build_chain()`, `ChatSession.stream/has_unsaved/mark_saved` | LCEL `|`, `MessagesPlaceholder`, stateless models → you manage history. Superseded in M3 |
-| `src/diary_agent/journal/entry.py` | Pydantic schemas | `ExtractedEntry` (LLM-inferred), `JournalEntry` (+ code-known fields) | Two-layer schema; all fields required; bounded lists; field order = evidence before judgement |
-| `src/diary_agent/journal/extract.py` | Transcript → entry | `build_extractor`, `extract_entry`, `apply_guardrails`, `field_guide`, `format_transcript`, `ExtractionError` | Structured output, retry-with-error-feedback, deterministic guardrails, schema as single source of truth for prompt |
-| `src/diary_agent/journal/db.py` | SQLite repo | `connect`, `save_entry` (INSERT OR REPLACE), `get_entry`, `list_entries`, `LIST_FIELDS` | Lists stored as JSON text; pydantic round-trip via `model_validate` |
-| `src/diary_agent/cli.py` | Typer CLI | `chat`, `save_flow`, `list_cmd`, `show`, `render_entry` | Human-in-the-loop confirmation before writes; BOM strip for PowerShell piping |
+| `backend/src/diary_agent/core/config.py` | Env/.env-driven frozen settings | `Settings`, `settings`, `PROJECT_ROOT` | Config in one place; model choice is config, not code |
+| `backend/src/diary_agent/core/llm.py` | Model factories | `get_chat_model(temperature, max_tokens)`, `get_embeddings()` | Depend on `BaseChatModel` interface; provider swap = one file; `reasoning` flag only sent when on |
+| `backend/src/diary_agent/core/prompts.py` | System prompts + version | `PROMPT_VERSION` (v1.4), `COMPANION_SYSTEM`, `EXTRACT_SYSTEM` | Prompt versioning so eval runs are comparable; changelog comments |
+| `backend/src/diary_agent/services/chat.py` | M1 LCEL chat | `build_chain()`, `ChatSession.stream/has_unsaved/mark_saved` | LCEL `|`, `MessagesPlaceholder`, stateless models → you manage history. Superseded in M3 |
+| `backend/src/diary_agent/models/entry.py` | Pydantic schemas | `ExtractedEntry` (LLM-inferred), `JournalEntry` (+ code-known fields) | Two-layer schema; all fields required; bounded lists; field order = evidence before judgement |
+| `backend/src/diary_agent/services/extraction.py` | Transcript → entry | `build_extractor`, `extract_entry`, `apply_guardrails`, `field_guide`, `format_transcript`, `ExtractionError` | Structured output, retry-with-error-feedback, deterministic guardrails, schema as single source of truth for prompt |
+| `backend/src/diary_agent/repositories/entry_repository.py` | SQLite repo | `connect`, `save_entry` (INSERT OR REPLACE), `get_entry`, `list_entries`, `LIST_FIELDS` | Lists stored as JSON text; pydantic round-trip via `model_validate` |
+| `backend/src/diary_agent/cli/app.py` | Typer CLI | `chat`, `save_flow`, `list_cmd`, `show`, `render_entry` | Human-in-the-loop confirmation before writes; BOM strip for PowerShell piping |
 | `scripts/smoke.py` | Ollama connectivity check | — | `.stream()`, embedding dim (768) |
 | `evals/extract_probe.py` | M2 mini eval: 7 cases × N runs | `CASES`, `check()` | Deterministic checks, mood *ranges*, `forbidden` words, repeated runs for nondeterminism. Seed of the M7 harness |
-| `tests/chat/test_session.py` | Chat plumbing tests | — | `FakeListChatModel` → tests without Ollama |
-| `tests/journal/test_extract.py` | Retry + guardrail tests | `scripted()` fake extractor via `RunnableLambda` | Test LLM control flow with scripted fakes |
-| `tests/journal/test_db.py` | SQLite round-trip tests | — | Repo layer tested in isolation |
+| `backend/tests/services/test_chat.py` | Chat plumbing tests | — | `FakeListChatModel` → tests without Ollama |
+| `backend/tests/services/test_extraction.py` | Retry + guardrail tests | `scripted()` fake extractor via `RunnableLambda` | Test LLM control flow with scripted fakes |
+| `backend/tests/repositories/test_entry_repository.py` | SQLite round-trip tests | — | Repo layer tested in isolation |
 
 ## Concept index
 
 ### M0: Models and messages
-- **Chat model + messages:** `SystemMessage`/`HumanMessage`/`AIMessage` in, `AIMessage` out. `llm.py`, `scripts/smoke.py`.
+- **Chat model + messages:** `SystemMessage`/`HumanMessage`/`AIMessage` in, `AIMessage` out. `core/llm.py`, `scripts/smoke.py`.
 - **invoke vs stream:** whole reply vs chunks. `ChatSession.stream`.
 - **Embeddings:** text → 768-dim vector (nomic-embed-text), unused until M4 RAG. `get_embeddings()`.
 
@@ -57,7 +59,7 @@ uv run diary list / show → db.list_entries / get_entry
 
 ### M2: Structured output and guardrails
 - **`with_structured_output(method="json_schema", include_raw=True)`:** returns `{raw, parsed, parsing_error}`, which enables retry with feedback. `extract.build_extractor`.
-- **Grammar-constrained decoding (Ollama):** guarantees structure, not content. Only *required* fields are forced, and descriptions aren't seen by the model. `entry.py` docstring.
+- **Grammar-constrained decoding (Ollama):** guarantees structure, not content. Only *required* fields are forced, and descriptions aren't seen by the model. `models/entry.py` docstring.
 - **Retry with error feedback:** show the model its bad output + the validation error. `extract_entry`.
 - **Deterministic guardrails > prompt tweaks** for rules checkable in code. They can't regress other cases. `apply_guardrails`.
 - **Never ask the model for what code knows:** date, transcript, model, and version come from code. `JournalEntry`.
@@ -68,14 +70,14 @@ uv run diary list / show → db.list_entries / get_entry
 
 | Decision | Why | Where |
 |---|---|---|
-| Default model llama3.1:8b over qwen3:8b | qwen3 leaked CJK in 1–3/9 replies; llama 0/27 | `config.py`, NOTES M1 |
-| All schema fields required, lists capped | Optional fields skipped; unbounded list looped forever | `entry.py` |
-| Field descriptions injected into prompt | Grammar doesn't pass descriptions to the model | `extract.field_guide` |
+| Default model llama3.1:8b over qwen3:8b | qwen3 leaked CJK in 1–3/9 replies; llama 0/27 | `core/config.py`, NOTES M1 |
+| All schema fields required, lists capped | Optional fields skipped; unbounded list looped forever | `models/entry.py` |
+| Field descriptions injected into prompt | Grammar doesn't pass descriptions to the model | `services/extraction.field_guide` |
 | Evidence fields before `mood` | Model writes JSON top-down; judge after facts | `ExtractedEntry` field order |
 | Extraction at temperature 0, `num_predict=512` | Most likely reading; runaway safety cap | `get_extraction_model` |
 | Guardrails in code for gratitude and mood_words | Prompt fix v1.4 regressed another case | `apply_guardrails` |
-| Package grouped into core/ chat/ journal/; docs/ and evals/ top-level | Flat layout was getting messy; folders leave room for chat/graph (M3), agent/ (M4, M6), evals/ (M7). tests/ mirrors src/ | repo layout, `docs/PLAN.md` |
-| One entry per day, confirm overwrite | Simple model; human approves destructive writes | `db.py`, `cli.save_flow` |
+| Full-stack layout: `backend/` (core / models / repositories / services / cli / api) + `frontend/` placeholder; root is a uv workspace | User asked for a traditional full-stack structure with data models kept separate. Layer rule: cli/api → services → repositories → models, and core is usable everywhere. The workspace keeps `uv run …` working from the root | root + `backend/pyproject.toml`, `docs/PLAN.md` |
+| One entry per day, confirm overwrite | Simple model; human approves destructive writes | `repositories/entry_repository.py`, `cli/app.save_flow` |
 
 ## Open questions / coming next
 - M3: replace `ChatSession` with a LangGraph `StateGraph` (router → checkin / chat_agent / summarize), `SqliteSaver` checkpointer keyed by date, `interrupt()` for save confirmation.

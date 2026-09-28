@@ -1,35 +1,25 @@
+# Workspace root. The app lives in backend/ (and later frontend/).
+# One lock file and one .venv here, so `uv run diary chat`, `uv run pytest` and
+# `uv run python evals/...` all work from the repo root.
 [project]
-name = "diary-agent"
+name = "diary-agent-workspace"
 version = "0.1.0"
-description = "Local-first chat journal agent built with LangChain + LangGraph + Ollama"
-readme = "README.md"
-authors = [
-    { name = "Beastarz", email = "jygoh1453@gmail.com" }
-]
 requires-python = ">=3.12"
-dependencies = [
-    "langchain-chroma>=1.1.0",
-    "langchain-core>=1.6.5",
-    "langchain-ollama>=1.1.0",
-    "langgraph>=1.2.12",
-    "langgraph-checkpoint-sqlite>=3.1.1",
-    "pydantic>=2.13.5",
-    "python-dotenv>=1.2.3",
-    "rich>=15.0.0",
-    "typer>=0.27.2",
-]
+dependencies = ["diary-agent"]
 
-[project.scripts]
-diary = "diary_agent.cli:app"
+[tool.uv]
+package = false
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[tool.uv.workspace]
+members = ["backend"]
 
-[build-system]
-requires = ["uv_build>=0.12.19,<0.13.0"]
-build-backend = "uv_build"
+[tool.uv.sources]
+diary-agent = { workspace = true }
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]

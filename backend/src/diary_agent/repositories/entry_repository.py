@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from diary_agent.core.config import settings
-from diary_agent.journal.entry import JournalEntry
+from diary_agent.models.entry import JournalEntry
 
 LIST_FIELDS = ("mood_words", "highlights", "challenges", "gratitude", "tags")
 

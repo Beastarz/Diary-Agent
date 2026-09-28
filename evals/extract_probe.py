@@ -114,7 +114,7 @@ def main():
 
     # Imported after setting the env var so config picks it up.
     from diary_agent.core.config import settings
-    from diary_agent.journal.extract import ExtractionError, build_extractor, extract_entry, get_extraction_model
+    from diary_agent.services.extraction import ExtractionError, build_extractor, extract_entry, get_extraction_model
 
     extractor = build_extractor(get_extraction_model())
     totals: dict[str, list[bool]] = defaultdict(list)

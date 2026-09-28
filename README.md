@@ -8,8 +8,28 @@ winget install Ollama.Ollama; winget install astral-sh.uv
 ollama pull llama3.1:8b; ollama pull nomic-embed-text
 ollama pull qwen3:8b     # optional, for model comparisons
 uv sync
-copy .env.example .env   # optional: change model etc.
+copy backend\.env.example backend\.env   # optional: change model etc.
 ```
+
+All commands below run from the repo root. It's a uv workspace, so there's one `.venv` and one `uv.lock` for everything.
+
+## Structure
+```
+backend/                 Python app (package: diary_agent)
+  src/diary_agent/
+    core/                config, LLM factories, prompts
+    models/              pydantic data models (ExtractedEntry, JournalEntry)
+    repositories/        data access: SQLite (all SQL lives here)
+    services/            business logic: chat, entry extraction
+    cli/                 Typer CLI (`diary` command)
+    api/                 HTTP API for the frontend (empty for now)
+  tests/                 unit tests, mirroring src/ (no Ollama needed)
+frontend/                future web UI (placeholder)
+evals/                   model-quality evals (need Ollama)
+scripts/                 dev utilities
+docs/                    PLAN.md (roadmap), NOTES.md (learning notes)
+```
+Dependencies point one way: `cli/api → services → repositories → models`, and everything can use `core`.
 
 ## Use
 ```powershell
