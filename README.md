@@ -20,7 +20,7 @@ backend/                 Python app (package: diary_agent)
     core/                config, LLM factories, prompts
     models/              pydantic data models (ExtractedEntry, JournalEntry)
     repositories/        data access: SQLite (all SQL lives here)
-    services/            business logic: chat, entry extraction
+    services/            business logic: LangGraph agent (services/agent/), entry extraction
     cli/                 Typer CLI (`diary` command)
     api/                 HTTP API for the frontend (empty for now)
   tests/                 unit tests, mirroring src/ (no Ollama needed)
@@ -33,7 +33,8 @@ Dependencies point one way: `cli/api → services → repositories → models`, 
 
 ## Use
 ```powershell
-uv run diary chat                  # talk to your journal; type /save to write today's entry
+uv run diary chat                  # talk to your journal; resumes today's conversation on restart
+                                   #   /checkin guided questions, /save write today's entry, /cancel stop a check-in
 uv run diary list                  # recent entries
 uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat)
 uv run python evals/extract_probe.py   # mini eval of entry extraction (needs Ollama)
@@ -45,7 +46,7 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 - [x] M0 Setup: Ollama, uv, model factories
 - [x] M1 Plain LangChain chat (LCEL, in-memory history)
 - [x] M2 Structured journal entries + SQLite
-- [ ] M3 LangGraph: state graph, checkpointing, human-in-the-loop
+- [x] M3 LangGraph: state graph, checkpointing, human-in-the-loop
 - [ ] M4 Tools + RAG over past entries
 - [ ] M5 Weekly/monthly summaries
 - [ ] M6 Long-term memory about you

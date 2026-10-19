@@ -11,12 +11,14 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M0 Setup | ✅ done |
 | M1 Plain LangChain chat | ✅ done |
 | M2 Structured entries | ✅ done |
-| M3 LangGraph conversion | ⏭ next |
-| M4–M8 | todo |
+| M3 LangGraph conversion | ✅ done |
+| M4 Tools / ReAct agent | ⏭ next |
+| M5–M8 | todo |
 
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
 - **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `evals/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
+- **M3:** `services/chat.py` replaced by `services/agent/` (StateGraph + `SqliteSaver`, thread_id = date). The router is rule-based only (slash commands + "check in" keyword); the LLM fallback waits for M7 routing evals. Deps go through LangGraph's `Runtime` context, not the state. The check-in is 4 code-chosen topics across turns, then extract → `interrupt()` → save. SQLite connections need `check_same_thread=False` because LangGraph runs nodes in worker threads.
 - **Structure (2026-09-28):** moved to a full-stack layout: `backend/` (layered `core / models / repositories / services / cli / api`) + `frontend/` placeholder, with the root as a uv workspace. See Project layout below.
 
 ## Stack
@@ -52,17 +54,16 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
         vector_repository.py     M4: Chroma index (add, search)
         memory_repository.py     M6: LangGraph BaseStore wrapper
       services/                  business logic
-        chat.py                  ✓ M1 LCEL chain + ChatSession (replaced by agent/ in M3)
         extraction.py            ✓ structured extraction + retries + guardrails
         summary.py               M5: map-reduce summaries
-        agent/                   M3+: LangGraph agent
-          state.py  nodes.py  graph.py   M3: StateGraph + checkpointer + interrupt()
+        agent/                   ✓ LangGraph agent (replaced M1's services/chat.py)
+          state.py  nodes.py  graph.py   ✓ StateGraph + checkpointer + interrupt()
           tools.py               M4: @tool search_entries, get_entries_by_date, save_entry, remember_fact
       cli/
-        app.py                   ✓ `diary chat` (/save), `list`, `show`; `summary` in M5
+        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`; `summary` in M5
       api/                       HTTP API for the frontend (FastAPI, when a UI is built)
     tests/                       no Ollama; fakes; mirrors src/
-      services/  repositories/   ✓
+      services/  services/agent/  repositories/   ✓
   frontend/                      placeholder for a future web UI
   evals/                         needs Ollama; measures model quality
     extract_probe.py             ✓ M2 mini eval (7 cases)
@@ -86,7 +87,7 @@ Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to 
 **M2 — Structured entries.** `extract_entry` uses `model.with_structured_output(JournalEntry)` (pydantic: date, mood 1–10, mood_words, highlights, challenges, gratitude, tags, summary). Persist to SQLite via `repositories/entry_repository.py`.
 *Learn:* structured output, schema design, validation/retry for small models.
 
-**M3 — LangGraph conversion.** Rebuild as a `StateGraph`: `router → {checkin | chat_agent | summarize}`. The guided check-in is a small sub-flow: ask a few reflective questions, then `extract_entry` → human confirmation via `interrupt()` → save. The `SqliteSaver` checkpointer uses thread_id = date, so you can resume today's conversation.
+**M3 — LangGraph conversion. ✅** Rebuild as a `StateGraph`: `router → {checkin | chat_agent | summarize}`. The guided check-in is a small sub-flow: ask a few reflective questions, then `extract_entry` → human confirmation via `interrupt()` → save. The `SqliteSaver` checkpointer uses thread_id = date, so you can resume today's conversation.
 *Learn:* state, nodes, conditional edges, checkpointing, human-in-the-loop interrupts.
 
 **M4 — Tools / ReAct agent.** The `chat_agent` node becomes a tool-calling agent (`ToolNode` + `tools_condition`) with `search_entries` (Chroma semantic search + date filters), `get_entries_by_date` and `save_entry`. Entries are embedded on save. Compare llama3.1 against qwen3 on tool calling.

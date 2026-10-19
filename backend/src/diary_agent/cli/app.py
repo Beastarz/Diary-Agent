@@ -6,19 +6,21 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
+from langgraph.types import Command
+
 from diary_agent.core.config import settings
 from diary_agent.core.llm import get_chat_model
-from diary_agent.core.prompts import PROMPT_VERSION
-from diary_agent.models.entry import ExtractedEntry, JournalEntry
+from diary_agent.models.entry import ExtractedEntry
 from diary_agent.repositories import entry_repository as entry_repo
-from diary_agent.services.chat import ChatSession
-from diary_agent.services.extraction import (
-    ExtractionError,
-    build_extractor,
-    extract_entry,
-    format_transcript,
-    get_extraction_model,
+from diary_agent.services.agent.graph import (
+    build_graph,
+    open_checkpointer,
+    pending_interrupt,
+    stream_turn,
+    thread_config,
 )
+from diary_agent.services.agent.state import DiaryContext
+from diary_agent.services.extraction import build_extractor, get_extraction_model
 
 app = typer.Typer(help="Local-first chat journal agent.", no_args_is_help=True)
 console = Console()
@@ -41,64 +43,82 @@ def render_entry(entry: ExtractedEntry, day: date) -> Panel:
     return Panel(body, title=f"{day.isoformat()} - mood {mood}", title_align="left", expand=False)
 
 
-def save_flow(session: ChatSession) -> None:
-    """Extract -> show -> confirm -> save. The human approves every write."""
-    today = date.today()
-    transcript = format_transcript(session.history)
-    with console.status("Writing up your entry..."):
-        try:
-            extracted = extract_entry(build_extractor(get_extraction_model()), transcript)
-        except ExtractionError as e:
-            console.print(f"[red]{e}[/red]")
-            return
-    console.print(render_entry(extracted, today))
+def ask_to_save(payload: dict, day: date) -> bool:
+    """Answers the graph's interrupt(): show the draft, get a yes/no from the human."""
+    console.print(render_entry(ExtractedEntry.model_validate(payload["draft"]), day))
+    if payload["exists"] and not Confirm.ask("An entry for today already exists. Overwrite it?"):
+        return False
+    return Confirm.ask("Save this entry?")
 
-    conn = entry_repo.connect()
-    if entry_repo.get_entry(conn, today) and not Confirm.ask("An entry for today already exists. Overwrite it?"):
+
+def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
+    """One graph run: stream the reply, answer any interrupt, show the notice."""
+    started = False
+    for kind, text in stream_turn(graph, graph_input, config, ctx):
+        if kind == "status":
+            console.print(f"[dim]{text}[/dim]")
+            continue
+        if not started:
+            console.print("[bold magenta]diary[/bold magenta]: ", end="")
+            started = True
+        console.print(text, end="", markup=False, highlight=False)
+    if started:
+        console.print()
+    payload = pending_interrupt(graph, config)
+    if payload is not None:
+        # Ctrl+C here leaves the graph paused; the next `diary chat` picks the question up again.
+        run_turn(graph, Command(resume=ask_to_save(payload, ctx.day)), config, ctx)
         return
-    if not Confirm.ask("Save this entry?"):
-        return
-    entry = JournalEntry(
-        **extracted.model_dump(),
-        entry_date=today,
-        transcript=transcript,
-        model=settings.chat_model,
-        prompt_version=PROMPT_VERSION,
-    )
-    entry_repo.save_entry(conn, entry)
-    session.mark_saved()
-    console.print("[green]Saved.[/green]")
+    notice = graph.get_state(config).values.get("notice")
+    if notice:
+        console.print(f"[green]{notice}[/green]" if notice == "Saved." else f"[dim]{notice}[/dim]")
 
 
 @app.command()
 def chat():
-    """Start a journaling conversation. '/save' writes today's entry; 'exit' quits."""
-    session = ChatSession(get_chat_model())
-    console.print(f"[dim]model: {settings.chat_model} - '/save' to save the entry, 'exit' to quit[/dim]")
-    console.print("[bold magenta]diary[/bold magenta]: Hi! How was your day?")
-    while True:
-        try:
+    """Journal with the agent. Today's conversation is saved as you go and resumes on restart."""
+    day = date.today()
+    ctx = DiaryContext(
+        chat_model=get_chat_model(),
+        extractor=build_extractor(get_extraction_model()),
+        conn=entry_repo.connect(),
+        day=day,
+        model_name=settings.chat_model,
+    )
+    graph = build_graph(open_checkpointer())
+    config = thread_config(day)
+    console.print(
+        f"[dim]model: {settings.chat_model} - /checkin guided questions, /save write the entry, "
+        "/cancel stop a check-in, exit quit[/dim]"
+    )
+
+    messages = graph.get_state(config).values.get("messages", [])
+    if messages:
+        console.print(f"[dim]Resuming today's conversation ({len(messages)} messages).[/dim]")
+        if messages[-1].type == "ai":  # only repeat a question that's still waiting for an answer
+            console.print("[bold magenta]diary[/bold magenta]: ", end="")
+            console.print(messages[-1].content, markup=False, highlight=False)
+    else:
+        console.print("[bold magenta]diary[/bold magenta]: Hi! How was your day?")
+
+    try:
+        if (payload := pending_interrupt(graph, config)) is not None:
+            run_turn(graph, Command(resume=ask_to_save(payload, day)), config, ctx)
+        while True:
             # lstrip BOM: PowerShell prepends U+FEFF when piping text into a program.
             user_input = console.input("[bold cyan]you[/bold cyan]: ").lstrip("﻿").strip()
-        except (KeyboardInterrupt, EOFError):
-            break
-        if user_input.lower() in {"exit", "quit", "bye"}:
-            break
-        if user_input.lower() == "/save":
-            if session.history:
-                save_flow(session)
-            else:
-                console.print("[dim]Nothing to save yet - tell me about your day first.[/dim]")
-            continue
-        if not user_input:
-            continue
-        console.print("[bold magenta]diary[/bold magenta]: ", end="")
-        for chunk in session.stream(user_input):
-            console.print(chunk, end="", markup=False, highlight=False)
-        console.print()
+            if user_input.lower() in {"exit", "quit", "bye"}:
+                break
+            if user_input:
+                run_turn(graph, {"user_input": user_input}, config, ctx)
+    except (KeyboardInterrupt, EOFError):
+        pass
+
     try:
-        if session.has_unsaved and Confirm.ask("Save today's entry before leaving?"):
-            save_flow(session)
+        values = graph.get_state(config).values
+        unsaved = len(values.get("messages", [])) > values.get("saved_count", 0)
+        if unsaved and Confirm.ask("Save today's entry before leaving?"):
+            run_turn(graph, {"user_input": "/save"}, config, ctx)
     except (KeyboardInterrupt, EOFError):
         pass
     console.print("[dim]Goodbye - see you tomorrow.[/dim]")
@@ -109,7 +129,7 @@ def list_cmd(limit: int = typer.Option(10, help="How many recent entries to show
     """List recent entries."""
     entries = entry_repo.list_entries(entry_repo.connect(), limit=limit)
     if not entries:
-        console.print("[dim]No entries yet. Run 'diary chat' and type /save.[/dim]")
+        console.print("[dim]No entries yet. Run 'diary chat' and type /checkin or /save.[/dim]")
         return
     table = Table("date", "mood", "tags", "summary")
     for e in entries:

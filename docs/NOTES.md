@@ -80,3 +80,32 @@ Lessons:
 - Remove `max_length` from `tags` and rerun `gratitude_only` (be ready to Ctrl+C).
 - Write a case you think will fail, e.g. sarcasm: "Oh *great*, another Monday." Does the mood come out right?
 - `uv run diary show --transcript` to see what was stored alongside the entry.
+
+## M3: LangGraph: state, nodes, edges, checkpoints, interrupts
+- **Where to look:** `services/agent/state.py` (state + context), `services/agent/nodes.py`, `services/agent/graph.py` (wiring, checkpointer, streaming), `cli/app.py` (`run_turn`, `ask_to_save`), `tests/services/agent/`
+- **The graph replaces `ChatSession`.** `START -> router -> {chat_agent | checkin | summarize | extract -> confirm -> save} -> END`. One `invoke` = one user turn.
+- **State vs context.** `DiaryState` is the conversation's *data* (messages, mode, draft). It is checkpointed after every node, so it must be serializable; that's why `draft` is a dict, not an `ExtractedEntry`. `DiaryContext` holds the *dependencies* (models, DB connection, date). It is passed fresh on each call via `context=` and nodes read it as `runtime.context`. Rule of thumb: if it should survive a restart, it's state; if it's a tool you use, it's context.
+- **Reducers.** `messages` uses `add_messages`, so a node returning `{"messages": [msg]}` *appends*. Every other key is overwritten. Nodes return only the keys they change.
+- **Conditional edges vs `Command`.** The router writes `route` and a conditional edge reads it: the decision is data you can see in the state. `confirm` returns `Command(goto=...)` instead, deciding and updating in one step. Both are fine; edges keep routing visible in `graph.py`.
+- **Multi-turn flows without loops.** The check-in spans 5 user turns, but the graph never loops. `mode` and `checkin_step` sit in the checkpointed state, so each new turn's router knows where we are. The code picks the next topic (`CHECKIN_TOPICS`); the model only words the question.
+- **Commands never enter `messages`.** `/save` is handled by the router and doesn't pollute the transcript the extractor reads. The CLI shows status through a separate `notice` key.
+- **Checkpointer = short-term memory.** `SqliteSaver` writes `data/checkpoints.db`, and `thread_id` = today's date. Restart `diary chat` and the conversation is still there. Tomorrow is a new thread. Try `graph.get_state_history(config)` to see every step.
+- **`interrupt()` = human in the loop.** `confirm` calls `interrupt(payload)`: the graph checkpoints and stops. The CLI shows the draft and resumes with `Command(resume=True/False)`, which becomes `interrupt()`'s return value. **On resume the node reruns from the top**, so code before `interrupt()` must be safe to repeat. The DB *read* is there; the *write* is in a separate `save` node. Ctrl+C at "Save this entry?" leaves the thread paused, and the next `diary chat` asks again.
+- **Streaming.** `stream_mode=["messages", "updates"]`: "messages" gives LLM tokens tagged with `langgraph_node` (so extraction JSON isn't printed), and "updates" gives each node's output (used for the "Writing up your entry..." status).
+
+### Bug found by running, not by tests
+The first real run crashed at `confirm`: `SQLite objects created in a thread can only be used in that same thread`. **LangGraph runs sync nodes in worker threads** when streaming, and `sqlite3` connections refuse cross-thread use by default. The unit tests used `invoke` and passed anyway. Fix: `check_same_thread=False` (safe, because one thread's steps run one node at a time), plus a regression test through `stream_turn`, the CLI's code path. It was checked to fail without the fix. **Lesson: test the same code path users run.**
+
+### Observed model failure (for M7)
+After a restart, "what was the best part of my day?" got: "...the laughter and conversation you had with your friend". The user never mentioned laughter. That is a **hallucinated past detail**, exactly what the groundedness judge in M7 should catch. It's also why M4 gives the agent a `search_entries` tool instead of letting it improvise.
+
+### Known limits
+- The keyword router misfires on "I had to check in at the hotel". M7 routing evals will measure this before an LLM fallback is added.
+- The whole day's history is resent every turn. Fine for one day; trimming comes with M6.
+- A conversation that runs past midnight stays on the old thread until you restart.
+
+### Try this
+- Start a `/checkin`, quit halfway, restart: it continues at the same question.
+- At "Save this entry?" press Ctrl+C, then run `diary chat` again.
+- `uv run python -c "from diary_agent.services.agent.graph import build_graph; print(build_graph().get_graph().draw_mermaid())"`, then paste the output into mermaid.live.
+- Change `CHECKIN_TOPICS` and see the check-in change, with no prompt edit.

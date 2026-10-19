@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS entries (
 def connect(path: Path | None = None) -> sqlite3.Connection:
     path = path or settings.data_dir / "journal.db"
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    # check_same_thread=False: LangGraph runs nodes in worker threads. Safe here because
+    # graph steps on one thread run one node at a time, so the connection is never used concurrently.
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
     return conn
