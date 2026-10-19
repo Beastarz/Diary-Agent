@@ -1,6 +1,6 @@
 # Repo learnings (AI-maintained)
 
-last_synced_commit: d3363f2 (+ uncommitted: full-stack restructure)
+last_synced_commit: 01f32ce
 last_synced: 2026-09-28
 current_milestone: M2 done, M3 (LangGraph) next
 
@@ -85,7 +85,10 @@ uv run diary list / show → entry_repo.list_entries / get_entry
 - Probe gaps: "8 out of 10" became a highlight, and a `work` tag landed on a dentist trip. No checks on tags or highlights yet (M7).
 
 ## Learner progress
-_Nothing recorded yet. Update as the user demonstrates understanding, gets confused, or takes quizzes._
-
 | Topic | Status (solid / shaky / not yet) | Evidence / date |
 |---|---|---|
+| Required fields + grammar (optional = skipped) | solid | M2 quiz Q2 correct, 2026-09-28 |
+| Bounded lists / runaway generation | solid-ish | M2 quiz Q4: got max_length; didn't mention num_predict as backstop, 2026-09-28 |
+| Two-layer schema (ExtractedEntry vs JournalEntry) | shaky | M2 quiz Q1: said "mood" (it's LLM-inferred); answer is date/transcript/model/prompt_version, 2026-09-28 |
+| Grammar doesn't pass descriptions → field_guide | shaky | M2 quiz Q3: guessed "second validation", 2026-09-28 |
+| Guardrails in code vs prompt rules | not yet | M2 quiz Q5: "no idea", 2026-09-28. Revisit with the v1.4 regression story |
