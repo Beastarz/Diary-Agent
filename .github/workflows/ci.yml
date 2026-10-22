@@ -1,0 +1,49 @@
+# Unit tests (no Ollama: they use fakes) on Linux and Windows, plus a guard that keeps
+# journal data and secrets out of the repo. Model-quality evals need a GPU + Ollama and
+# run locally (evals/), not here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows too: development happens there, and M4 hit Windows-only bugs.
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      # --locked fails if uv.lock is out of date with pyproject.toml.
+      # Python comes from .python-version.
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No journal data, eval results or secrets tracked
+        # .gitignore covers these; this catches a `git add -f`. A diary must never be published.
+        run: |
+          bad=$(git ls-files | grep -E '^data/|^evals/results/|(^|/)chroma/|\.(db|sqlite3?)$|(^|/)\.env$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Private files are tracked. Remove them with 'git rm --cached':"
+            echo "$bad"
+            exit 1
+          fi
+          echo "OK: no private files tracked."

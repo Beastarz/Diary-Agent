@@ -1,0 +1,18 @@
+# Weekly dependency bumps as PRs; CI's tests decide whether they're safe to merge.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # LangChain/LangGraph packages are released together and depend on each other,
+      # so they're bumped (and tested) together in one PR.
+      langchain:
+        patterns: ["langchain*", "langgraph*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
