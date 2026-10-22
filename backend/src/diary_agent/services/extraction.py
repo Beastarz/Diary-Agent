@@ -54,8 +54,10 @@ def field_guide() -> str:
 
 
 def format_transcript(history: list[BaseMessage]) -> str:
+    """Only what was *said*. Tool results are past entries, and tool-call messages are usually
+    empty, so both are left out; otherwise old days would leak into today's entry."""
     speaker = {"human": "User", "ai": "Assistant"}
-    return "\n".join(f"{speaker.get(m.type, m.type)}: {m.content}" for m in history)
+    return "\n".join(f"{speaker[m.type]}: {m.content}" for m in history if m.type in speaker and m.content)
 
 
 def extract_entry(extractor: Runnable, transcript: str, max_retries: int = 2) -> ExtractedEntry:

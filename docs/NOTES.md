@@ -109,3 +109,44 @@ After a restart, "what was the best part of my day?" got: "...the laughter and c
 - At "Save this entry?" press Ctrl+C, then run `diary chat` again.
 - `uv run python -c "from diary_agent.services.agent.graph import build_graph; print(build_graph().get_graph().draw_mermaid())"`, then paste the output into mermaid.live.
 - Change `CHECKIN_TOPICS` and see the check-in change, with no prompt edit.
+
+## M4: Tools, the ReAct loop, RAG, and measuring tool use
+- **Where to look:** `services/agent/tools.py`, `repositories/vector_repository.py`, `services/agent/nodes.py` (`chat_agent`, `calendar_hint`, `LOOKUP_REQUEST`), `services/agent/graph.py`, `evals/tool_probe.py`, `tests/services/agent/test_tools.py`
+- **The loop.** `chat_agent <-> tools`. The model replies; if the reply has `tool_calls`, `tools_condition` sends it to `ToolNode`, which runs the tools and appends `ToolMessage`s; then the model is called again with the results. With no tool calls, the turn ends. That's ReAct: reason → act → observe → repeat. It's still one `invoke` per user turn, just with more steps inside.
+- **A tool = name + docstring + arg schema.** That's *all* the model sees (print `convert_to_openai_tool(tool)` to check). The docstring says *when* to use the tool, not just what it does. `ToolRuntime` gives tools the same `DiaryContext` as nodes and is hidden from the schema.
+- **Tool errors are messages.** Bad input returns `"Error: ... Use YYYY-MM-DD."` so the model can retry. `ToolNode` also turns uncaught exceptions into `ToolMessage`s by default.
+- **Read-only tools on purpose.** There's no `save_entry` tool: writes still go through extract → `interrupt()` → save, so the model can never write without a human yes.
+- **RAG = retrieve, then generate.** Entries are embedded on save (summary + highlights + challenges + tags, not the noisy transcript) into Chroma with `id = date`, so re-saving replaces the vector. SQLite stays the source of truth: search returns dates, and the tool reads the full entries from SQLite. `diary reindex` rebuilds the index. nomic-embed-text wants `search_document:` / `search_query:` prefixes.
+- **Tool traffic stays out of today's entry.** Tool results are *past* entries. `format_transcript` drops tool messages, or the extractor would copy old days into today. There's a test for it.
+- **Guard the loop.** `MAX_TOOL_ROUNDS = 3`. After that the model is called without tools and has to answer.
+
+### What the eval found (evals/tool_probe.py)
+14 cases (date questions, topic questions, small talk) × 3 runs, one real graph turn each, against a seeded 10-entry journal with "today" fixed. Every fix below came from a number, not a hunch:
+
+| Change | Failure it fixed (llama3.1) | Before → after |
+|---|---|---|
+| Date cheat-sheet in the prompt (`calendar_hint`) | "Monday this week" → Oct 17. 8B models can't do calendar math | date args 50% → 90% |
+| Removed optional date args from `search_entries` | `start_date: "0000-00-00"`, then "I need a valid start date" | fewer args, fewer ways to fail |
+| Distance cutoff (`MAX_DISTANCE = 0.43`) | "When did I go skiing?" → an invented Niseko trip. Nearest-neighbour search always returns k results | admits "nothing found" 3/3 |
+| Code gate: tools offered only for questions/requests (`LOOKUP_REQUEST`) | Tool calls on "thanks" and "I'm anxious". **A prompt rule changed nothing (75% → 75%)** | false tool calls 75% → 0% |
+
+Final llama3.1: tool choice 93%, args 83%, grounded answers 90%, 0% false tool calls, ~1.7 s/turn.
+
+**llama3.1 vs qwen3 (same prompt v1.7, before the gate):** qwen3 never called tools on small talk, but missed 40% of needed calls (llama 7%), got date args right 43% of the time (llama 90%), and invented details without looking ("a small bowl and a decorative tile"). It even misread the cheat-sheet ("Tuesday, October 19"). **llama3.1 stays the default.** The M1 CJK-leak check was clean for both on these short replies.
+
+### Lessons
+- **When a prompt rule doesn't hold, move the decision into code.** The model is good at *which* tool; the code is better at *whether* tools are on offer at all, and at dates.
+- **Two models, opposite biases.** llama over-calls, qwen3 under-calls. A single "accuracy" number hides that, so split it into missed-call and false-call rates.
+- **Separate retrieval from reasoning.** The eval's model-free retrieval check had recall 4/4, so the remaining failures are the model's, not Chroma's.
+- **Check your checker.** Several "failures" were the keyword checker missing a correct answer ("that dinner with your sister on Wednesday"). Strict labels can also be debatable: "running records *recently*" via a date range got the right answer, but was scored as the wrong tool. That's M7's job (LLM judge, more cases).
+- **n is tiny.** 14 cases × 3 runs, and the threshold was calibrated on 10 entries. Treat the numbers as directional. Results JSON records the model, prompt version and git commit.
+
+### Known limits
+- `LOOKUP_REQUEST` needs a "?" or a request verb at the start: "when did I last see my sister" without a "?" gets no tools.
+- `MAX_DISTANCE` is calibrated on 10 synthetic entries; an extra word in the query ("pottery class *today*") can push a real match past it.
+- The assistant's final reply about a past day stays in today's transcript, so extraction could still pick up past events from it. Watch for this in the M7 extraction eval.
+
+### Try this
+- `uv run python evals/tool_probe.py --runs 3` (both models, ~4 min). Then delete the `LOOKUP_REQUEST` check in `chat_agent` and run `--models llama3.1:8b` again.
+- Set `MAX_DISTANCE = 1.0` and ask about skiing.
+- In `diary chat`, ask "what did I write yesterday?" and watch the "Searching your journal..." status.

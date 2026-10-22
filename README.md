@@ -19,7 +19,7 @@ backend/                 Python app (package: diary_agent)
   src/diary_agent/
     core/                config, LLM factories, prompts
     models/              pydantic data models (ExtractedEntry, JournalEntry)
-    repositories/        data access: SQLite (all SQL lives here)
+    repositories/        data access: SQLite entries + Chroma search index
     services/            business logic: LangGraph agent (services/agent/), entry extraction
     cli/                 Typer CLI (`diary` command)
     api/                 HTTP API for the frontend (empty for now)
@@ -37,7 +37,9 @@ uv run diary chat                  # talk to your journal; resumes today's conve
                                    #   /checkin guided questions, /save write today's entry, /cancel stop a check-in
 uv run diary list                  # recent entries
 uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat)
+uv run diary reindex               # rebuild the search index from saved entries
 uv run python evals/extract_probe.py   # mini eval of entry extraction (needs Ollama)
+uv run python evals/tool_probe.py      # tool-use eval, llama3.1 vs qwen3 (needs Ollama)
 uv run pytest                      # unit tests (no Ollama needed)
 uv run python scripts/smoke.py     # check Ollama connectivity
 ```
@@ -47,7 +49,7 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 - [x] M1 Plain LangChain chat (LCEL, in-memory history)
 - [x] M2 Structured journal entries + SQLite
 - [x] M3 LangGraph: state graph, checkpointing, human-in-the-loop
-- [ ] M4 Tools + RAG over past entries
+- [x] M4 Tools + RAG over past entries (ask "what did I do yesterday?" in chat)
 - [ ] M5 Weekly/monthly summaries
 - [ ] M6 Long-term memory about you
 - [ ] M7 Evals: component, retrieval, trajectory, LLM-as-judge, simulated users

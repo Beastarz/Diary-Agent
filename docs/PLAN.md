@@ -12,17 +12,19 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M1 Plain LangChain chat | ✅ done |
 | M2 Structured entries | ✅ done |
 | M3 LangGraph conversion | ✅ done |
-| M4 Tools / ReAct agent | ⏭ next |
-| M5–M8 | todo |
+| M4 Tools / ReAct agent | ✅ done |
+| M5 Summaries | ⏭ next |
+| M6–M8 | todo |
 
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
 - **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `evals/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
 - **M3:** `services/chat.py` replaced by `services/agent/` (StateGraph + `SqliteSaver`, thread_id = date). The router is rule-based only (slash commands + "check in" keyword); the LLM fallback waits for M7 routing evals. Deps go through LangGraph's `Runtime` context, not the state. The check-in is 4 code-chosen topics across turns, then extract → `interrupt()` → save. SQLite connections need `check_same_thread=False` because LangGraph runs nodes in worker threads.
+- **M4:** `chat_agent <-> tools` loop (`ToolNode` + `tools_condition`) with two read-only tools, `search_entries` (Chroma, cosine cutoff 0.43) and `get_entries_by_date`. There's **no `save_entry` tool**: writes stay behind `interrupt()`. `remember_fact` moves to M6. Entries are embedded on save; `diary reindex` rebuilds the index. `evals/tool_probe.py` drove four fixes: a date cheat-sheet in the prompt, no date args on search, a relevance cutoff, and a code gate that only offers tools for questions/requests (a prompt rule didn't stop llama's 75% false tool calls; the gate made it 0%). llama3.1 beat qwen3 on tool use (missed calls 7% vs 40%, date args 90% vs 43%), so it stays the default (see NOTES.md M4).
 - **Structure (2026-09-28):** moved to a full-stack layout: `backend/` (layered `core / models / repositories / services / cli / api`) + `frontend/` placeholder, with the root as a uv workspace. See Project layout below.
 
 ## Stack
-- **LLM**: Ollama `llama3.1:8b` (default). `qwen3:8b` is also pulled, for comparisons and tool calling. Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
+- **LLM**: Ollama `llama3.1:8b` (default; re-confirmed for tool calling in M4). `qwen3:8b` is also pulled, for comparisons. Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
 - **Embeddings**: Ollama `nomic-embed-text` (768 dims).
 - **Libraries**: `langchain-core`, `langchain-ollama`, `langgraph`, `langgraph-checkpoint-sqlite`, `langchain-chroma` (local vector store), `pydantic`, `rich` + `typer` (CLI), `pytest`, `openevals` / `agentevals` (to add in M7).
 - **Packaging**: `uv` workspace. Root `pyproject.toml` holds dev tools + pytest config; `backend/pyproject.toml` is the `diary-agent` package with CLI entry point `diary = diary_agent.cli.app:app`.
@@ -51,22 +53,23 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
         memory.py                M6: user facts
       repositories/              data access; the only place with SQL / vector DB calls
         entry_repository.py      ✓ SQLite entries (connect, save_entry, get_entry, list_entries)
-        vector_repository.py     M4: Chroma index (add, search)
+        vector_repository.py     ✓ Chroma index (upsert_entry, search, count)
         memory_repository.py     M6: LangGraph BaseStore wrapper
       services/                  business logic
         extraction.py            ✓ structured extraction + retries + guardrails
         summary.py               M5: map-reduce summaries
         agent/                   ✓ LangGraph agent (replaced M1's services/chat.py)
           state.py  nodes.py  graph.py   ✓ StateGraph + checkpointer + interrupt()
-          tools.py               M4: @tool search_entries, get_entries_by_date, save_entry, remember_fact
+          tools.py               ✓ @tool search_entries, get_entries_by_date (remember_fact in M6)
       cli/
-        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`; `summary` in M5
+        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`, `reindex`; `summary` in M5
       api/                       HTTP API for the frontend (FastAPI, when a UI is built)
     tests/                       no Ollama; fakes; mirrors src/
       services/  services/agent/  repositories/   ✓
   frontend/                      placeholder for a future web UI
   evals/                         needs Ollama; measures model quality
     extract_probe.py             ✓ M2 mini eval (7 cases)
+    tool_probe.py                ✓ M4 tool-use eval (14 cases, llama3.1 vs qwen3, retrieval check)
     datasets/*.jsonl  evaluators.py  run_evals.py   M7
   scripts/
     smoke.py                     ✓ Ollama connectivity check
@@ -90,7 +93,7 @@ Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to 
 **M3 — LangGraph conversion. ✅** Rebuild as a `StateGraph`: `router → {checkin | chat_agent | summarize}`. The guided check-in is a small sub-flow: ask a few reflective questions, then `extract_entry` → human confirmation via `interrupt()` → save. The `SqliteSaver` checkpointer uses thread_id = date, so you can resume today's conversation.
 *Learn:* state, nodes, conditional edges, checkpointing, human-in-the-loop interrupts.
 
-**M4 — Tools / ReAct agent.** The `chat_agent` node becomes a tool-calling agent (`ToolNode` + `tools_condition`) with `search_entries` (Chroma semantic search + date filters), `get_entries_by_date` and `save_entry`. Entries are embedded on save. Compare llama3.1 against qwen3 on tool calling.
+**M4 — Tools / ReAct agent. ✅** The `chat_agent` node becomes a tool-calling agent (`ToolNode` + `tools_condition`) with read-only `search_entries` (Chroma semantic search) and `get_entries_by_date`. Entries are embedded on save. llama3.1 vs qwen3 compared on tool calling with `evals/tool_probe.py`.
 *Learn:* tool design (names, docstrings, arg schemas), agent loop, RAG, failure modes of small models calling tools.
 
 **M5 — Summaries.** `diary summary --week|--month`: fetch range → map (condense each entry) → reduce (trends in mood, recurring themes, wins) → optionally save as a summary record.

@@ -12,6 +12,7 @@ from diary_agent.core.config import settings
 from diary_agent.core.llm import get_chat_model
 from diary_agent.models.entry import ExtractedEntry
 from diary_agent.repositories import entry_repository as entry_repo
+from diary_agent.repositories import vector_repository as vector_repo
 from diary_agent.services.agent.graph import (
     build_graph,
     open_checkpointer,
@@ -82,6 +83,7 @@ def chat():
         chat_model=get_chat_model(),
         extractor=build_extractor(get_extraction_model()),
         conn=entry_repo.connect(),
+        vectors=vector_repo.open_store(),
         day=day,
         model_name=settings.chat_model,
     )
@@ -149,6 +151,17 @@ def show(day: str = typer.Argument(None, help="YYYY-MM-DD (default: today)"),
     console.print(render_entry(entry, entry.entry_date))
     if transcript:
         console.print(entry.transcript, markup=False, highlight=False)
+
+
+@app.command()
+def reindex():
+    """Rebuild the search index from saved entries (e.g. entries saved before M4, or while Ollama was down)."""
+    entries = entry_repo.list_entries(entry_repo.connect())
+    store = vector_repo.open_store()
+    with console.status(f"Embedding {len(entries)} entries..."):
+        for entry in entries:
+            vector_repo.upsert_entry(store, entry)
+    console.print(f"[green]Indexed {len(entries)} entries.[/green] Index now holds {vector_repo.count(store)}.")
 
 
 @app.command()

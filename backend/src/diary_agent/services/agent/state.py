@@ -13,6 +13,7 @@ from typing import Literal
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import Runnable
+from langchain_core.vectorstores import VectorStore
 from langgraph.graph import MessagesState
 
 Route = Literal["chat", "checkin", "extract", "summarize", "done"]
@@ -39,5 +40,6 @@ class DiaryContext:
     chat_model: BaseChatModel
     extractor: Runnable  # build_extractor(...) output
     conn: sqlite3.Connection  # journal.db
+    vectors: VectorStore  # vector_repository.open_store(): entry embeddings for search
     day: date  # the entry date, and the thread_id
     model_name: str  # recorded on saved entries

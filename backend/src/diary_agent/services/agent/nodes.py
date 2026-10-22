@@ -5,17 +5,20 @@ save path is extract (LLM) -> confirm (human) -> save (code).
 """
 
 import re
+from datetime import date, timedelta
 from typing import Literal
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
-from diary_agent.core.prompts import CHECKIN_SYSTEM, COMPANION_SYSTEM, PROMPT_VERSION
+from diary_agent.core.prompts import CHECKIN_SYSTEM, COMPANION_SYSTEM, PROMPT_VERSION, TOOLS_SYSTEM
 from diary_agent.models.entry import ExtractedEntry, JournalEntry
 from diary_agent.repositories import entry_repository as entry_repo
+from diary_agent.repositories import vector_repository as vector_repo
 from diary_agent.services.agent.state import DiaryContext, DiaryState
+from diary_agent.services.agent.tools import TOOLS
 from diary_agent.services.extraction import ExtractionError, extract_entry, format_transcript
 
 # The code picks the topic order; the model only words each question.
@@ -25,6 +28,12 @@ CHECKIN_TOPICS = (
     "anything that was hard or stressful",
     "something they're grateful for",
 )
+MAX_TOOL_ROUNDS = 3  # per user turn; small models can keep calling tools forever
+GAVE_UP = "Sorry, I couldn't find that in your journal."
+# Tools are only offered for questions and requests. llama3.1 called a tool on 75% of plain
+# statements ("thanks", "I'm anxious") even with a prompt rule against it (evals/tool_probe.py),
+# so the code decides when tools are on the table and the model decides which one.
+LOOKUP_REQUEST = re.compile(r"\?|^\s*(tell|remind|show|find|look|search|list|summari[sz]e)\b", re.IGNORECASE)
 CHECKIN_PHRASE = re.compile(r"\bcheck[- ]?in\b", re.IGNORECASE)
 
 
@@ -59,16 +68,54 @@ def route_after_router(state: DiaryState) -> str:
 
 
 def _companion_prompt(state: DiaryState, ctx: DiaryContext, extra: str = "") -> list[BaseMessage]:
-    system = COMPANION_SYSTEM.format(today=ctx.day.isoformat())
+    system = COMPANION_SYSTEM.format(today=f"{ctx.day.isoformat()} ({ctx.day:%A})")
     if extra:
         system += "\n\n" + extra
     # The whole day's history is resent every turn. Fine for one day; trimming comes with M6.
     return [SystemMessage(system), *state["messages"]]
 
 
+def calendar_hint(day: date, days_back: int = 13) -> str:
+    """Code does the calendar math; the model only looks dates up. 8B models get "last Monday"
+    wrong when they have to compute it (evals/tool_probe.py), but copy a listed date reliably."""
+    monday = day - timedelta(days=day.weekday())
+    fmt = lambda d: f"{d:%A} {d.isoformat()}"  # noqa: E731
+    lines = [
+        f"- today: {fmt(day)}",
+        f"- yesterday: {fmt(day - timedelta(days=1))}",
+        f"- this week: {monday.isoformat()} to {(monday + timedelta(days=6)).isoformat()}",
+        f"- last week: {(monday - timedelta(days=7)).isoformat()} to {(monday - timedelta(days=1)).isoformat()}",
+        f"- this month: {day.replace(day=1).isoformat()} to {day.isoformat()}",
+        "- recent days: " + ", ".join(fmt(day - timedelta(days=i)) for i in range(2, days_back + 1)),
+    ]
+    return "\n".join(lines)
+
+
+def _tool_rounds_this_turn(messages: list[BaseMessage]) -> int:
+    rounds = 0
+    for m in reversed(messages):
+        if m.type == "human":
+            break
+        rounds += isinstance(m, AIMessage) and bool(m.tool_calls)
+    return rounds
+
+
 def chat_agent(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
+    """The "reason" half of the ReAct loop. If the reply has tool_calls, tools_condition sends
+    them to the ToolNode, whose results come back here; otherwise the reply goes to the user."""
     ctx = runtime.context
-    return {"messages": [ctx.chat_model.invoke(_companion_prompt(state, ctx))]}
+    if not LOOKUP_REQUEST.search(state["user_input"]):
+        # Statements, feelings, thanks: no tools on offer, so none can be called.
+        return {"messages": [ctx.chat_model.invoke(_companion_prompt(state, ctx))]}
+    prompt = _companion_prompt(state, ctx, TOOLS_SYSTEM.format(calendar=calendar_hint(ctx.day)))
+    if _tool_rounds_this_turn(state["messages"]) < MAX_TOOL_ROUNDS:
+        return {"messages": [ctx.chat_model.bind_tools(TOOLS).invoke(prompt)]}
+    # Out of tool budget: answer with what we have. A reply that still carries tool_calls
+    # would loop back to the ToolNode, so drop them.
+    reply = ctx.chat_model.invoke(prompt)
+    if isinstance(reply, AIMessage) and reply.tool_calls:
+        reply = AIMessage(reply.content or GAVE_UP)
+    return {"messages": [reply]}
 
 
 def checkin(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
@@ -126,4 +173,9 @@ def save(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
         prompt_version=PROMPT_VERSION,
     )
     entry_repo.save_entry(ctx.conn, entry)
-    return {"draft": None, "saved_count": len(state["messages"]), "notice": "Saved."}
+    notice = "Saved."
+    try:
+        vector_repo.upsert_entry(ctx.vectors, entry)
+    except Exception:  # Ollama down, etc. The entry is safe in SQLite; the index can be rebuilt.
+        notice = "Saved, but not indexed for search. Run 'diary reindex' later."
+    return {"draft": None, "saved_count": len(state["messages"]), "notice": notice}
