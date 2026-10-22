@@ -1,12 +1,34 @@
 """Wires the nodes into a StateGraph and compiles it with a checkpointer.
 
-    START -> router -+-> chat_agent <-> tools     (tools_condition: loop while the reply has tool calls)
-                     |       +-> END
-                     +-> checkin ----> END        (one question per turn)
-                     +-> summarize --> END        (stub until M5)
-                     +-> extract -+-> confirm --(interrupt)--> save -> END
-                     |            +-> END (nothing to save / failed)
-                     +-> END (/cancel)
+                                        START
+                                          |
+                                          v
+                                   +-------------+
+                                   |   router    |  rule-based: slash commands, the "check in"
+                                   +-------------+  keyword, and the checkpointed `mode`
+                                          |
+          +---------------+---------------+---------------+---------------+
+          | chat          | checkin       | summarize     | extract       | done (/cancel)
+          v               v               v               v               v
+    +------------+  +-----------+  +-------------+  +-----------+        END
+    | chat_agent |  |  checkin  |  |  summarize  |  |  extract  |
+    +------------+  +-----------+  +-------------+  +-----------+
+      |    |   ^          |               |            |      |
+      |    |   |          v               v      draft |      | nothing to save
+      |    |   |         END             END           |      | or extraction failed
+      |    |   |                                       v      v
+      |    v   |                                  +---------+ END
+      |  +--------+                               | confirm |  interrupt(): the CLI asks
+      |  | tools  |  ToolNode runs the calls,     +---------+  "Save this entry?"
+      |  +--------+  results go back up             |     |
+      |                                         yes |     | no
+      | no tool calls                               v     v
+      v (or 3 rounds used)                      +-------+ END
+     END                                        | save  |
+                                                +-------+
+                                                    |
+                                                    v
+                                                   END
 
 One invoke = one user turn. Multi-turn flows (the check-in) work because `mode` and
 `checkin_step` are in the checkpointed state, so the router knows where we left off.
