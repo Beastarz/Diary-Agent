@@ -35,7 +35,7 @@ This was a tiny **eval**: fixed inputs, a deterministic checker, several repeats
 
 ### Try this
 - Change the system prompt tone and compare replies.
-- Set `DIARY_CHAT_MODEL=qwen3:8b` and compare.
+- Set `DIARY_CHAT_MODEL` to another Ollama model and compare.
 - Chat for 30+ turns. The history grows without limit. What happens to speed? (Hint: context window. M3/M6 handle trimming.)
 
 ## M2: Structured output, schema design, guardrails
@@ -76,7 +76,7 @@ Lessons:
 6. **100% means the eval is too easy, not that the model is perfect.** The probe still misses things: "8 out of 10" listed as a *highlight*, and a `work` tag on a dentist trip. M7 needs harder cases and checks on tags and highlights.
 
 ### Try this
-- `uv run python evals/extract_probe.py --model qwen3:8b`: how does it compare?
+- `uv run python evals/extract_probe.py --model <other model>`: how does it compare?
 - Remove `max_length` from `tags` and rerun `gratitude_only` (be ready to Ctrl+C).
 - Write a case you think will fail, e.g. sarcasm: "Oh *great*, another Monday." Does the mood come out right?
 - `uv run diary show --transcript` to see what was stored alongside the entry.
@@ -132,7 +132,7 @@ After a restart, "what was the best part of my day?" got: "...the laughter and c
 
 Final llama3.1: tool choice 93%, args 83%, grounded answers 90%, 0% false tool calls, ~1.7 s/turn.
 
-**llama3.1 vs qwen3 (same prompt v1.7, before the gate):** qwen3 never called tools on small talk, but missed 40% of needed calls (llama 7%), got date args right 43% of the time (llama 90%), and invented details without looking ("a small bowl and a decorative tile"). It even misread the cheat-sheet ("Tuesday, October 19"). **llama3.1 stays the default.** The M1 CJK-leak check was clean for both on these short replies.
+**llama3.1 vs qwen3 (same prompt v1.7, before the gate):** qwen3 never called tools on small talk, but missed 40% of needed calls (llama 7%), got date args right 43% of the time (llama 90%), and invented details without looking ("a small bowl and a decorative tile"). It even misread the cheat-sheet ("Tuesday, October 19"). **llama3.1 stays the default, and qwen3 was dropped from the project after this.** The M1 CJK-leak check was clean for both on these short replies.
 
 ### Lessons
 - **When a prompt rule doesn't hold, move the decision into code.** The model is good at *which* tool; the code is better at *whether* tools are on offer at all, and at dates.

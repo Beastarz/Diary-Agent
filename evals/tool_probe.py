@@ -1,6 +1,6 @@
 """M4 eval: does the model call the right tool, with the right arguments, and stay grounded?
 
-Run: uv run python evals/tool_probe.py [--runs 3] [--models llama3.1:8b qwen3:8b]
+Run: uv run python evals/tool_probe.py [--runs 3] [--models llama3.1:8b other:tag]
 
 Each run is one user turn through the *real* graph (router -> chat_agent <-> tools), against a
 seeded 10-entry journal in a temp dir, with "today" fixed to TODAY so date answers are known.
@@ -163,8 +163,7 @@ def run_model(model_name: str, runs: int, conn, store) -> list[dict]:
 
     model = ChatOllama(
         model=model_name, base_url=settings.ollama_base_url, temperature=settings.temperature,
-        # qwen3 thinks unless told not to; llama3.1 rejects the flag. Same as the app's default.
-        reasoning=False if model_name.startswith("qwen3") else None,
+        reasoning=settings.reasoning or None,  # same as core/llm.py
     )
     # extractor=None: one chat turn never reaches extraction.
     ctx = DiaryContext(chat_model=model, extractor=None, conn=conn, vectors=store, day=TODAY, model_name=model_name)
@@ -216,13 +215,16 @@ def report(model_name: str, records: list[dict], runs: int) -> dict:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=3)
-    parser.add_argument("--models", nargs="+", default=["llama3.1:8b", "qwen3:8b"])
+    parser.add_argument("--models", nargs="+", default=None, help="default: the configured chat model")
     args = parser.parse_args()
 
     from diary_agent.core.config import PROJECT_ROOT
     from diary_agent.core.llm import get_embeddings
     from diary_agent.core.prompts import PROMPT_VERSION
 
+    from diary_agent.core.config import settings
+
+    args.models = args.models or [settings.chat_model]
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # Chroma may hold file locks
         conn, store = seed(Path(tmp), get_embeddings())
         ranks = retrieval_check(store)

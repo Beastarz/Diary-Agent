@@ -18,7 +18,7 @@ class Settings:
     embed_model: str = os.getenv("DIARY_EMBED_MODEL", "nomic-embed-text")
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     temperature: float = float(os.getenv("DIARY_TEMPERATURE", "0.7"))
-    # Only used by reasoning models like qwen3. Thinking makes replies slower; off by default for chat.
+    # Only used by reasoning ("thinking") models; llama3.1 isn't one. Thinking makes replies slower; off by default for chat.
     reasoning: bool = os.getenv("DIARY_REASONING", "false").lower() == "true"
     data_dir: Path = Path(os.getenv("DIARY_DATA_DIR", PROJECT_ROOT / "data"))
 

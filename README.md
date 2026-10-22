@@ -6,7 +6,6 @@ A local-first, chat-based daily journal agent. Built step by step to learn LangC
 ```powershell
 winget install Ollama.Ollama; winget install astral-sh.uv
 ollama pull llama3.1:8b; ollama pull nomic-embed-text
-ollama pull qwen3:8b     # optional, for model comparisons
 uv sync
 copy backend\.env.example backend\.env   # optional: change model etc.
 ```
@@ -39,7 +38,7 @@ uv run diary list                  # recent entries
 uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat)
 uv run diary reindex               # rebuild the search index from saved entries
 uv run python evals/extract_probe.py   # mini eval of entry extraction (needs Ollama)
-uv run python evals/tool_probe.py      # tool-use eval, llama3.1 vs qwen3 (needs Ollama)
+uv run python evals/tool_probe.py      # tool-use eval; --models a b to compare (needs Ollama)
 uv run pytest                      # unit tests (no Ollama needed)
 uv run python scripts/smoke.py     # check Ollama connectivity
 ```

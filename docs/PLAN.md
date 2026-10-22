@@ -21,10 +21,11 @@ Change log:
 - **M2:** one entry per day (re-save asks before overwriting). Ollama structured output needs *all fields required* and *bounded lists* (see NOTES.md M2). Added deterministic `apply_guardrails()` for gratitude and mood words. `evals/extract_probe.py` (7 cases) is the seed of the M7 extraction eval.
 - **M3:** `services/chat.py` replaced by `services/agent/` (StateGraph + `SqliteSaver`, thread_id = date). The router is rule-based only (slash commands + "check in" keyword); the LLM fallback waits for M7 routing evals. Deps go through LangGraph's `Runtime` context, not the state. The check-in is 4 code-chosen topics across turns, then extract → `interrupt()` → save. SQLite connections need `check_same_thread=False` because LangGraph runs nodes in worker threads.
 - **M4:** `chat_agent <-> tools` loop (`ToolNode` + `tools_condition`) with two read-only tools, `search_entries` (Chroma, cosine cutoff 0.43) and `get_entries_by_date`. There's **no `save_entry` tool**: writes stay behind `interrupt()`. `remember_fact` moves to M6. Entries are embedded on save; `diary reindex` rebuilds the index. `evals/tool_probe.py` drove four fixes: a date cheat-sheet in the prompt, no date args on search, a relevance cutoff, and a code gate that only offers tools for questions/requests (a prompt rule didn't stop llama's 75% false tool calls; the gate made it 0%). llama3.1 beat qwen3 on tool use (missed calls 7% vs 40%, date args 90% vs 43%), so it stays the default (see NOTES.md M4).
+- **2026-10-22:** qwen3 dropped from the project (lost on CJK leaks in M1 and tool use in M4). llama3.1:8b is the only chat model; evals still take `--models` for future comparisons.
 - **Structure (2026-09-28):** moved to a full-stack layout: `backend/` (layered `core / models / repositories / services / cli / api`) + `frontend/` placeholder, with the root as a uv workspace. See Project layout below.
 
 ## Stack
-- **LLM**: Ollama `llama3.1:8b` (default; re-confirmed for tool calling in M4). `qwen3:8b` is also pulled, for comparisons. Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
+- **LLM**: Ollama `llama3.1:8b` (chose over qwen3:8b in M1 and again in M4; qwen3 since dropped). Model name configurable via `.env` (`DIARY_CHAT_MODEL`).
 - **Embeddings**: Ollama `nomic-embed-text` (768 dims).
 - **Libraries**: `langchain-core`, `langchain-ollama`, `langgraph`, `langgraph-checkpoint-sqlite`, `langchain-chroma` (local vector store), `pydantic`, `rich` + `typer` (CLI), `pytest`, `openevals` / `agentevals` (to add in M7).
 - **Packaging**: `uv` workspace. Root `pyproject.toml` holds dev tools + pytest config; `backend/pyproject.toml` is the `diary-agent` package with CLI entry point `diary = diary_agent.cli.app:app`.
@@ -69,7 +70,7 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
   frontend/                      placeholder for a future web UI
   evals/                         needs Ollama; measures model quality
     extract_probe.py             ✓ M2 mini eval (7 cases)
-    tool_probe.py                ✓ M4 tool-use eval (14 cases, llama3.1 vs qwen3, retrieval check)
+    tool_probe.py                ✓ M4 tool-use eval (14 cases, --models to compare, retrieval check)
     datasets/*.jsonl  evaluators.py  run_evals.py   M7
   scripts/
     smoke.py                     ✓ Ollama connectivity check
@@ -110,7 +111,7 @@ Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to 
 5. **LLM-as-judge (via `openevals`, local judge model):** empathy/non-judgmental tone, asks follow-up questions, no hallucinated past events (groundedness vs retrieved entries), safety (appropriate response to distress mentions).
 6. **Multi-turn simulation:** a simulated-user LLM with a persona runs a full check-in; judge whether a complete, accurate entry was saved.
 7. **Language-consistency eval:** formalize the M1 CJK-leak probe.
-Results are saved as JSON with prompt version + model name, so runs can be compared (e.g. qwen3:8b vs llama3.1:8b, prompt v1 vs v2). NOTES should cover eval pitfalls: judge bias, small datasets, and nondeterminism (run N times).
+Results are saved as JSON with prompt version + model name, so runs can be compared (e.g. llama3.1:8b vs another model, prompt v1 vs v2). NOTES should cover eval pitfalls: judge bias, small datasets, and nondeterminism (run N times).
 
 **M8 (optional polish).** Export entries to Markdown, `diary list`, safety guardrail node, local tracing viewer.
 

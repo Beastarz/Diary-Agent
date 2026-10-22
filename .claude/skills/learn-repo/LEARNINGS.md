@@ -107,7 +107,7 @@ uv run diary list / show → entry_repo.list_entries / get_entry
 ## Open questions / coming next
 - M4: `chat_agent` becomes a tool-calling agent (`ToolNode` + `tools_condition`) with `search_entries` (Chroma), `get_entries_by_date`, `save_entry`; entries embedded on save. Motivated by the M3 hallucinated "laughter" detail (NOTES M3).
 - Known M3 limits: keyword router misfires; full history resent each turn (M6); a chat past midnight stays on yesterday's thread until restart.
-- M4: will qwen3 beat llama3.1 at tool calling enough to justify per-task models? Decide with evals.
+- ~~M4: will qwen3 beat llama3.1 at tool calling?~~ No (tool_probe: missed calls 40% vs 7%). qwen3 dropped 2026-10-22.
 - Probe gaps: "8 out of 10" became a highlight, and a `work` tag landed on a dentist trip. No checks on tags or highlights yet (M7).
 
 ## Learner progress
