@@ -1,3 +1,4 @@
+import time
 from datetime import date
 
 import typer
@@ -11,8 +12,11 @@ from langgraph.types import Command
 from diary_agent.core.config import settings
 from diary_agent.core.llm import get_chat_model
 from diary_agent.models.entry import ExtractedEntry
+from diary_agent.models.summary import SummaryRecord
 from diary_agent.repositories import entry_repository as entry_repo
+from diary_agent.repositories import summary_repository as summary_repo
 from diary_agent.repositories import vector_repository as vector_repo
+from diary_agent.services import summary as summary_service
 from diary_agent.services.agent.graph import (
     build_graph,
     open_checkpointer,
@@ -21,7 +25,7 @@ from diary_agent.services.agent.graph import (
     thread_config,
 )
 from diary_agent.services.agent.state import DiaryContext
-from diary_agent.services.extraction import build_extractor, get_extraction_model
+from diary_agent.services.extraction import ExtractionError, build_extractor, get_extraction_model
 
 app = typer.Typer(help="Local-first chat journal agent.", no_args_is_help=True)
 console = Console()
@@ -162,6 +166,66 @@ def reindex():
         for entry in entries:
             vector_repo.upsert_entry(store, entry)
     console.print(f"[green]Indexed {len(entries)} entries.[/green] Index now holds {vector_repo.count(store)}.")
+
+
+def render_summary(s: SummaryRecord) -> Panel:
+    def items(xs: list[str]) -> str:
+        return "\n".join(f"  - {x}" for x in xs) if xs else "  [dim]-[/dim]"
+
+    mood = f"avg mood {s.mood_avg}/10" if s.mood_avg is not None else "no mood ratings"
+    body = (
+        f"{s.overview}\n\n"
+        f"[bold]Mood:[/bold] {s.mood_trend}\n\n"
+        f"[bold]Themes:[/bold]\n{items(s.themes)}\n"
+        f"[bold]Wins:[/bold]\n{items(s.wins)}\n"
+        f"[bold]Challenges:[/bold]\n{items(s.challenges)}"
+    )
+    count = f"{s.entry_count} {'entry' if s.entry_count == 1 else 'entries'}"
+    title = f"{s.period} {s.start_date.isoformat()} to {s.end_date.isoformat()} - {count}, {mood}"
+    return Panel(body, title=title, title_align="left", expand=False)
+
+
+@app.command()
+def summary(
+    week: bool = typer.Option(True, "--week/--month", help="Summarize a calendar week (Mon-Sun) or month."),
+    day: str = typer.Option(None, "--date", help="Any day in the period, YYYY-MM-DD (default: today)."),
+    saved: bool = typer.Option(False, "--saved", help="Show the saved summary instead of writing a new one."),
+):
+    """Summarize a week or month of entries: mood trend, recurring themes, wins."""
+    period = "week" if week else "month"
+    start, end = summary_service.period_range(period, date.fromisoformat(day) if day else date.today())
+    conn = entry_repo.connect()
+    existing = summary_repo.get_summary(conn, period, start)
+    if saved:
+        if not existing:
+            console.print(f"[dim]No saved {period} summary starting {start.isoformat()}.[/dim]")
+            raise typer.Exit(1)
+        console.print(render_summary(existing))
+        return
+
+    entries = entry_repo.list_entries(conn, start=start, end=end)
+    if not entries:
+        console.print(f"[dim]No entries between {start.isoformat()} and {end.isoformat()}.[/dim]")
+        return
+    writer = summary_service.build_writer(summary_service.get_summary_model(max_tokens=200))
+    reducer = summary_service.build_reducer(summary_service.get_summary_model(max_tokens=800))
+    started = time.perf_counter()
+    with console.status(f"Condensing {len(entries)} entries, then writing the {period} review..."):
+        try:
+            record = summary_service.summarize_period(
+                writer, reducer, entries, period, start, end, settings.chat_model
+            )
+        except ExtractionError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+    console.print(render_summary(record))
+    console.print(f"[dim]{time.perf_counter() - started:.1f}s[/dim]")
+
+    if existing and not Confirm.ask(f"A saved summary for this {period} exists. Overwrite it?"):
+        return
+    if Confirm.ask("Save this summary?"):
+        summary_repo.save_summary(conn, record)
+        console.print("[green]Saved.[/green]")
 
 
 @app.command()

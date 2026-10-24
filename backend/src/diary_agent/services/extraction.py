@@ -8,6 +8,7 @@ schema, so the JSON is almost always well-formed. Pydantic can still reject it
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
+from pydantic import BaseModel
 
 from diary_agent.models.entry import ExtractedEntry
 from diary_agent.core.llm import get_chat_model
@@ -48,9 +49,9 @@ def build_extractor(model: BaseChatModel) -> Runnable:
     return model.with_structured_output(ExtractedEntry, method="json_schema", include_raw=True)
 
 
-def field_guide() -> str:
+def field_guide(schema: type[BaseModel] = ExtractedEntry) -> str:
     """Schema descriptions -> prompt text, so the schema stays the single source of truth."""
-    return "\n".join(f"- {name}: {f.description}" for name, f in ExtractedEntry.model_fields.items())
+    return "\n".join(f"- {name}: {f.description}" for name, f in schema.model_fields.items())
 
 
 def format_transcript(history: list[BaseMessage]) -> str:
@@ -65,14 +66,20 @@ def extract_entry(extractor: Runnable, transcript: str, max_retries: int = 2) ->
         SystemMessage(f"{EXTRACT_SYSTEM}\n\nFields:\n{field_guide()}"),
         HumanMessage(f"Conversation:\n\n{transcript}\n\nExtract the diary entry."),
     ]
+    return apply_guardrails(invoke_structured(extractor, messages, max_retries, "entry"), transcript)
+
+
+def invoke_structured(runnable: Runnable, messages: list[BaseMessage], max_retries: int, what: str):
+    """Calls a with_structured_output(include_raw=True) runnable until it parses. Also used by summaries."""
+    messages = list(messages)
     for _ in range(max_retries + 1):
-        result = extractor.invoke(messages)
+        result = runnable.invoke(messages)
         if result["parsed"] is not None:
-            return apply_guardrails(result["parsed"], transcript)
+            return result["parsed"]
         # Show the model its own output and what was wrong, then ask again.
         raw = result["raw"].content if result.get("raw") else ""
         messages += [
             AIMessage(raw),
             HumanMessage(f"That output was invalid: {result['parsing_error']}. Return corrected JSON only."),
         ]
-    raise ExtractionError(f"Could not extract a valid entry after {max_retries + 1} attempts")
+    raise ExtractionError(f"Could not get a valid {what} after {max_retries + 1} attempts")

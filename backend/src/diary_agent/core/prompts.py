@@ -1,6 +1,6 @@
 """System prompts. Bump PROMPT_VERSION whenever you change a prompt so eval runs stay comparable."""
 
-PROMPT_VERSION = "v1.7"
+PROMPT_VERSION = "v1.8"
 # v1.1: language-consistency rule (qwen3 leaked Chinese tokens)
 # v1.2: added EXTRACT_SYSTEM
 # v1.3: field guide injected into extraction prompt, fields reordered, softer mood rule
@@ -8,6 +8,7 @@ PROMPT_VERSION = "v1.7"
 # v1.5: added CHECKIN_SYSTEM (M3 guided check-in)
 # v1.6: added TOOLS_SYSTEM (M4 tool calling); weekday shown next to today's date
 # v1.7: date cheat-sheet in TOOLS_SYSTEM, stricter when-to-call rule (from evals/tool_probe.py)
+# v1.8: added CONDENSE_SYSTEM, COLLAPSE_SYSTEM, REDUCE_SYSTEM (M5 summaries)
 
 COMPANION_SYSTEM = """You are a warm, thoughtful journaling companion. Today is {today}.
 
@@ -35,7 +36,7 @@ TOOLS_SYSTEM = """You can look up the user's past journal entries with tools.
 Dates (use these exactly, do not calculate):
 {calendar}"""
 
-EXTRACT_SYSTEM ="""You turn a journaling conversation into a structured diary entry.
+EXTRACT_SYSTEM = """You turn a journaling conversation into a structured diary entry.
 
 Rules:
 - Use ONLY what the user said. The assistant's questions are context, not facts about the user's day.
@@ -43,3 +44,27 @@ Rules:
 - Keep list items short (a few words each).
 - Write in the same language as the user."""
 
+# M5 map step: one entry -> a short digest. Runs once per entry, so it stays small.
+CONDENSE_SYSTEM = """You condense one diary entry into a short digest for a {period} review.
+
+Rules:
+- At most 3 sentences in second person ("You ..."). One is fine for a short entry.
+- Keep concrete events, people, feelings, wins and problems. Drop small talk.
+- Keep the user's wording. Do not add conclusions or commentary the entry doesn't state.
+- Use ONLY what the entry says. Never invent details.
+- Write in the same language as the entry. Output the digest only."""
+
+# M5 collapse step: only used when the digests are still too long for one reduce prompt.
+COLLAPSE_SYSTEM = """You merge several day-by-day diary digests into one shorter digest.
+
+Rules:
+- Keep the dates of important events, and keep anything that happened on more than one day.
+- Use ONLY what the digests say. Never invent details.
+- At most 6 sentences. Output the merged digest only."""
+
+# M5 reduce step: digests + code-computed stats -> PeriodSummary (structured output).
+REDUCE_SYSTEM = """You write a {period} review of the user's diary from day-by-day digests.
+
+Rules:
+- Use ONLY what the digests say. Never invent events, people or feelings.
+- The mood numbers were computed by code and are correct. Describe the trend; do not recalculate.- Write in second person ("You ...") and in the same language as the digests."""

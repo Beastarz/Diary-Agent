@@ -150,3 +150,45 @@ Final llama3.1: tool choice 93%, args 83%, grounded answers 90%, 0% false tool c
 - `uv run python evals/tool_probe.py --runs 3` (both models, ~4 min). Then delete the `LOOKUP_REQUEST` check in `chat_agent` and run `--models llama3.1:8b` again.
 - Set `MAX_DISTANCE = 1.0` and ask about skiing.
 - In `diary chat`, ask "what did I write yesterday?" and watch the "Searching your journal..." status.
+
+## M5: Map-reduce summaries and context budgeting
+- **Where to look:** `services/summary.py`, `models/summary.py`, `repositories/summary_repository.py`, `cli/app.py` (`summary`), `evals/summary_probe.py`, `tests/services/test_summary.py`
+- **The shape.** *map* condenses each entry into a ~2-sentence digest (one LLM call per entry, via `writer.batch()`, which is LCEL's map). *collapse* merges groups of digests, but only when they're still over budget. *reduce* writes the review as structured output (`PeriodSummary`). Each call has a known, bounded input size, which is the whole point.
+- **Why not one big prompt?** Ollama's default context window is a few thousand tokens, and anything past it is **cut silently**: the model just never sees the start of the month. So every summary call sets `num_ctx=8192`, and they all use the same value, because changing `num_ctx` between requests makes Ollama reload the model.
+- **The budget, in tokens** (estimated as chars / 4, which is rough but enough for a budget): `MAP_INPUT_TOKENS = 2000` per entry, `REDUCE_INPUT_TOKENS = 3000` of digests. Cheap cuts come first: the map input keeps only the `User:` lines of the transcript, since the assistant's words aren't facts about the day and are about half the tokens.
+- **Code does the numbers.** Mood average, lowest/highest day and tags that recur on 2+ days are computed and passed to the reduce prompt as facts. The date and mood prefix on each digest also comes from code, so the reduce step can't lose them.
+- **Summaries stay out of the chat.** `/summary` points to the CLI. A review posted into today's conversation would become part of today's transcript, and extraction would copy last week's events into today's entry.
+- **Saving needs a yes**, like entries. It's one row per `(period, start_date)` in `summaries`, and `--saved` shows it again without an LLM call.
+
+### What the probe found (evals/summary_probe.py)
+3 cases (a full week, a 10-entry month, and a sparse week with 2 entries) × 3 runs, through the real `summarize_period`, on tool_probe's seeded October journal. Each fix came from a number:
+
+| Change | Failure it fixed (llama3.1) | Before → after |
+|---|---|---|
+| Condense prompt: "at most 3 sentences, one is fine", "keep the user's wording" | "2-3 sentences" made it pad a short entry: "*Your first project is now complete*" became "completed pottery class" in the review | embellish → 9/9 |
+| **Removed** a computed "Mood trend: down (6.8 → 6.0)" line | With it, the review named both the low and the high day in 2/6 runs; without it, 6/6. The model narrated the direction and dropped the specifics | mood 2/6 → 6/6 |
+| Code writes `mood_trend` when fewer than 3 days are rated | "remained steady at 7/10 throughout the period" for 2 days out of 7. **A prompt rule changed nothing (0/3)** | trend overclaim gone |
+| Guardrail drops wins/challenges containing "mood" | "good mood" listed as a win (3/3 → 1/3 after a field-description fix, then 0 with the guardrail) | grounded 8/9 → 9/9 |
+
+Final: grounded 9/9, low+high days named 6/6, recurring themes 3/3, no embellishment 9/9, sparse-week wording 2/3. Time: ~11 s for a 5-entry week, ~15 s for a 10-entry month, about 1 s per entry for the map step. The 10-entry reduce prompt is only ~450 tokens, so a real 31-day month (~1,400) fits without collapsing.
+
+**Forcing collapse** (`--collapse`, budget 150 tokens): the month needed 9 extra calls and took 34 s instead of 15 s, and after 3 rounds it was *still* over budget (~330 tokens). Merged text has a floor: it can only get so short before it's useless, which is why `MAX_COLLAPSE_ROUNDS` exists. On this data the checks passed anyway, but the per-day dates are gone after a merge.
+
+### Lessons
+- **Map-reduce is a budgeting tool, not a quality tool.** Every extra LLM hop is another chance to distort. The pottery error came from the *map* step, and the review just repeated it. Inspect intermediate outputs (the probe saves the digests), not only the final answer.
+- **Length requirements cause invention.** Ask for "2-3 sentences" about a one-line entry and the model will make up the third.
+- **More computed facts aren't automatically better.** The model talks about whatever you give it. Measure each addition.
+- **Prompt rules didn't hold, again** (M4: tools; M5: "don't overclaim"). Where the rule is checkable, move it into code.
+- **Check your own arithmetic.** While building this I misread October as trending *up*, and briefly "fixed" a correct model output. The eval caught it, not intuition.
+
+### Known limits
+- The *overview* can still overgeneralize from sparse data ("You had a great month" from 1 entry; sparse check 2/3). Only `mood_trend` is overridden by code. An LLM judge in M7 can measure this properly.
+- The keyword checks are crude: "grounded" means a shared content word, not a faithful reading.
+- Saved summaries don't notice when entries are edited later. Re-run and overwrite.
+- chars / 4 underestimates tokens for CJK text. Fine while everything is English.
+
+### Try this
+- `uv run python evals/summary_probe.py --runs 3`, then `--collapse`, and compare the saved digests in `evals/results/`.
+- Put "2-3 sentences" back into `CONDENSE_SYSTEM` and look at the Oct 8 digest.
+- `uv run diary summary --month --date 2026-10-01` on your own journal, then `--saved` after saving it.
+- Set `num_ctx=2048` in `get_summary_model` and paste a long transcript into an entry: watch the start of the month disappear without an error.

@@ -127,7 +127,9 @@ def checkin(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
 
 
 def summarize(state: DiaryState) -> dict:
-    return {"notice": "Summaries arrive in M5."}
+    # Summaries live outside the chat on purpose: a review of past days posted here would end
+    # up in today's transcript, and extraction would copy old events into today's entry.
+    return {"notice": "Summaries run outside the chat: 'diary summary --week' or 'diary summary --month'."}
 
 
 def _transcript(state: DiaryState) -> str:

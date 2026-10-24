@@ -6,12 +6,16 @@ from langchain_ollama import ChatOllama, OllamaEmbeddings
 from diary_agent.core.config import settings
 
 
-def get_chat_model(temperature: float | None = None, max_tokens: int | None = None) -> ChatOllama:
+def get_chat_model(
+    temperature: float | None = None, max_tokens: int | None = None, num_ctx: int | None = None
+) -> ChatOllama:
     return ChatOllama(
         model=settings.chat_model,
         base_url=settings.ollama_base_url,
         temperature=settings.temperature if temperature is None else temperature,
         num_predict=max_tokens,
+        # None = Ollama's default window (a few thousand tokens). Longer prompts are cut *silently*.
+        num_ctx=num_ctx,
         # Non-reasoning models (e.g. llama3.1) reject the flag, so only send it when it's on.
         reasoning=settings.reasoning or None,
     )
