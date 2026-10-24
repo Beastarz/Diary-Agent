@@ -8,11 +8,11 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "langchain-chroma>=1.1.0",
-    "langchain-core>=1.6.5",
+    "langchain-core>=1.6.12",
     "langchain-ollama>=1.1.0",
     "langgraph>=1.2.12",
     "langgraph-checkpoint-sqlite>=3.1.1",
-    "pydantic>=2.13.5",
+    "pydantic>=2.14.1",
     "python-dotenv>=1.2.4",
     "rich>=15.0.0",
     "typer>=0.27.2",
@@ -22,5 +22,5 @@ dependencies = [
 diary = "diary_agent.cli.app:app"
 
 [build-system]
-requires = ["uv_build>=0.12.19,<0.13.0"]
+requires = ["uv_build>=0.13.1,<0.14.0"]
 build-backend = "uv_build"
