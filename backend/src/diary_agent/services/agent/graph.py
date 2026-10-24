@@ -21,14 +21,21 @@
       |  +--------+                               | confirm |  interrupt(): the CLI asks
       |  | tools  |  ToolNode runs the calls,     +---------+  "Save this entry?"
       |  +--------+  results go back up             |     |
-      |                                         yes |     | no
-      | no tool calls                               v     v
-      v (or 3 rounds used)                      +-------+ END
-     END                                        | save  |
-                                                +-------+
-                                                    |
-                                                    v
-                                                   END
+      |      |                                  yes |     | no
+      | no   | remember_fact                        v     v
+      | tool | proposed a memory                +-------+ END
+      | calls|                                  | save  |
+      v      |                                  +-------+
+     END     |                                      |
+             |                                      v
+             |                              +---------------+
+             |                              | update_memory |  LLM: lasting facts from today
+             |                              +---------------+
+             |                         proposals |       | none
+             v                                   |       v
+      +----------------+ <-----------------------+      END
+      | confirm_memory |  interrupt(): "Remember this?" per proposal, then writes the store.
+      +----------------+  -> chat_agent (to answer the remember_fact call) or END
 
 One invoke = one user turn. Multi-turn flows (the check-in) work because `mode` and
 `checkin_step` are in the checkpointed state, so the router knows where we left off.
@@ -45,6 +52,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
 from diary_agent.core.config import settings
@@ -55,7 +63,8 @@ from diary_agent.services.agent.tools import TOOLS
 REPLY_NODES = {"chat_agent", "checkin"}  # nodes whose LLM tokens are shown to the user
 
 
-def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStateGraph:
+def build_graph(checkpointer: BaseCheckpointSaver | None = None, store: BaseStore | None = None) -> CompiledStateGraph:
+    """checkpointer = short-term memory (one thread per day); store = long-term memory (shared by all threads)."""
     g = StateGraph(DiaryState, context_schema=DiaryContext)
     g.add_node("router", nodes.router)
     g.add_node("chat_agent", nodes.chat_agent)
@@ -65,6 +74,8 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
     g.add_node("extract", nodes.extract)
     g.add_node("confirm", nodes.confirm)  # returns Command(goto=...); its type hint declares the targets
     g.add_node("save", nodes.save)
+    g.add_node("update_memory", nodes.update_memory)
+    g.add_node("confirm_memory", nodes.confirm_memory)  # Command(goto=...), like confirm
 
     g.add_edge(START, "router")
     g.add_conditional_edges(
@@ -73,11 +84,13 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None) -> CompiledStat
         {"chat": "chat_agent", "checkin": "checkin", "extract": "extract", "summarize": "summarize", "done": END},
     )
     g.add_conditional_edges("chat_agent", tools_condition, ["tools", END])
-    g.add_edge("tools", "chat_agent")
+    g.add_conditional_edges("tools", nodes.route_after_tools, ["confirm_memory", "chat_agent"])
     g.add_conditional_edges("extract", nodes.route_after_extract, ["confirm", END])
-    for node in ("checkin", "summarize", "save"):
+    g.add_edge("save", "update_memory")
+    g.add_conditional_edges("update_memory", nodes.route_after_update_memory, ["confirm_memory", END])
+    for node in ("checkin", "summarize"):
         g.add_edge(node, END)
-    return g.compile(checkpointer=checkpointer)
+    return g.compile(checkpointer=checkpointer, store=store)
 
 
 def open_checkpointer(path: Path | None = None) -> SqliteSaver:
@@ -108,7 +121,10 @@ def stream_turn(
                 yield "token", chunk.content
         elif payload.get("router", {}).get("route") == "extract":
             yield "status", "Writing up your entry..."
-        elif any(getattr(m, "tool_calls", None) for m in (payload.get("chat_agent") or {}).get("messages", [])):
+        elif "save" in payload and graph.store is not None:
+            yield "status", "Looking for things to remember..."
+        elif any(c["name"] != "remember_fact" for m in (payload.get("chat_agent") or {}).get("messages", [])
+                 for c in getattr(m, "tool_calls", None) or []):
             yield "status", "Searching your journal..."
 
 

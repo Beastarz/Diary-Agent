@@ -89,3 +89,37 @@ def test_bad_dates_come_back_as_errors_the_model_can_read(runtime, args, error):
 def test_runtime_is_hidden_from_the_model():
     for t in tools.TOOLS:
         assert "runtime" not in t.tool_call_schema.model_json_schema()["properties"]
+
+
+# --- M6: remember_fact ------------------------------------------------------------------
+
+@pytest.fixture
+def memory_runtime(embeddings):
+    from langgraph.store.memory import InMemoryStore
+
+    store = InMemoryStore(index={"dims": 11, "embed": embeddings, "fields": ["content"]})
+    return SimpleNamespace(context=SimpleNamespace(day=date(2026, 10, 20)), store=store,
+                           state={"user_input": "Remember that I'm vegetarian."}, tool_call_id="c1")
+
+
+def remember(runtime, **args):
+    return tools.remember_fact.func(runtime=runtime, **args)
+
+
+def test_remember_fact_proposes_without_writing(memory_runtime):
+    out = remember(memory_runtime, content="Is vegetarian", kind="preference")
+    [proposal] = out.update["pending_memories"]
+    assert proposal["memory"]["evidence"] == "Remember that I'm vegetarian."  # the user's words, not the model's
+    assert proposal["tool_call_id"] == "c1"
+    assert out.update["messages"][0].tool_call_id == "c1"
+    assert memory_runtime.store.search(("user", "profile")) == []
+
+
+@pytest.mark.parametrize("content", ["I", "vegetarian", "I am vegetarian", "x" * 200])
+def test_remember_fact_rejects_bad_content(memory_runtime, content):
+    assert remember(memory_runtime, content=content, kind="preference").startswith("Error:")
+
+
+def test_remember_fact_without_store(memory_runtime):
+    memory_runtime.store = None
+    assert "not available" in remember(memory_runtime, content="Is vegetarian", kind="preference")

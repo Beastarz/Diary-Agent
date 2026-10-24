@@ -12,10 +12,13 @@ from langgraph.types import Command
 from diary_agent.core.config import settings
 from diary_agent.core.llm import get_chat_model
 from diary_agent.models.entry import ExtractedEntry
+from diary_agent.models.memory import Memory, MemoryKind
 from diary_agent.models.summary import SummaryRecord
 from diary_agent.repositories import entry_repository as entry_repo
+from diary_agent.repositories import memory_repository as memory_repo
 from diary_agent.repositories import summary_repository as summary_repo
 from diary_agent.repositories import vector_repository as vector_repo
+from diary_agent.services import memory as memory_service
 from diary_agent.services import summary as summary_service
 from diary_agent.services.agent.graph import (
     build_graph,
@@ -56,6 +59,23 @@ def ask_to_save(payload: dict, day: date) -> bool:
     return Confirm.ask("Save this entry?")
 
 
+def ask_to_remember(payload: dict) -> list[bool]:
+    """Answers confirm_memory's interrupt(): one yes/no per proposed memory."""
+    answers = []
+    for p in payload["proposals"]:
+        m = p["memory"]
+        if p["action"] == "update":
+            console.print(f"[bold]Update memory[/bold] ({m['kind']}): {p['replaces']} [dim]->[/dim] {m['content']}")
+        else:
+            console.print(f"[bold]New memory[/bold] ({m['kind']}): {m['content']}")
+        answers.append(Confirm.ask("Remember this?"))
+    return answers
+
+
+def answer_interrupt(payload: dict, day: date) -> bool | list[bool]:
+    return ask_to_remember(payload) if "proposals" in payload else ask_to_save(payload, day)
+
+
 def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
     """One graph run: stream the reply, answer any interrupt, show the notice."""
     started = False
@@ -72,11 +92,12 @@ def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
     payload = pending_interrupt(graph, config)
     if payload is not None:
         # Ctrl+C here leaves the graph paused; the next `diary chat` picks the question up again.
-        run_turn(graph, Command(resume=ask_to_save(payload, ctx.day)), config, ctx)
+        run_turn(graph, Command(resume=answer_interrupt(payload, ctx.day)), config, ctx)
         return
     notice = graph.get_state(config).values.get("notice")
     if notice:
-        console.print(f"[green]{notice}[/green]" if notice == "Saved." else f"[dim]{notice}[/dim]")
+        good = notice.startswith(("Saved.", "Remembered")) and "Couldn't" not in notice
+        console.print(f"[green]{notice}[/green]" if good else f"[dim]{notice}[/dim]")
 
 
 @app.command()
@@ -90,8 +111,9 @@ def chat():
         vectors=vector_repo.open_store(),
         day=day,
         model_name=settings.chat_model,
+        memory_extractor=memory_service.build_memory_extractor(get_extraction_model()),
     )
-    graph = build_graph(open_checkpointer())
+    graph = build_graph(open_checkpointer(), memory_repo.open_store())
     config = thread_config(day)
     console.print(
         f"[dim]model: {settings.chat_model} - /checkin guided questions, /save write the entry, "
@@ -109,7 +131,7 @@ def chat():
 
     try:
         if (payload := pending_interrupt(graph, config)) is not None:
-            run_turn(graph, Command(resume=ask_to_save(payload, day)), config, ctx)
+            run_turn(graph, Command(resume=answer_interrupt(payload, day)), config, ctx)
         while True:
             # lstrip BOM: PowerShell prepends U+FEFF when piping text into a program.
             user_input = console.input("[bold cyan]you[/bold cyan]: ").lstrip("﻿").strip()
@@ -226,6 +248,46 @@ def summary(
     if Confirm.ask("Save this summary?"):
         summary_repo.save_summary(conn, record)
         console.print("[green]Saved.[/green]")
+
+
+memory_app = typer.Typer(help="See and edit what the agent remembers about you.", no_args_is_help=True)
+app.add_typer(memory_app, name="memory")
+
+
+@memory_app.command("list")
+def memory_list():
+    """List remembered facts, goals, people and preferences."""
+    memories = memory_repo.list_memories(memory_repo.open_store())
+    if not memories:
+        console.print("[dim]Nothing remembered yet. Say 'remember that ...' in 'diary chat'.[/dim]")
+        return
+    table = Table("id", "kind", "content", "learned")
+    for m in memories:
+        table.add_row(m.id, m.kind, m.content, m.source_date.isoformat())
+    console.print(table)
+
+
+@memory_app.command("forget")
+def memory_forget(memory_id: str = typer.Argument(..., help="The id from 'diary memory list'.")):
+    """Delete one memory."""
+    if not memory_repo.delete_memory(memory_repo.open_store(), memory_id):
+        console.print(f"[dim]No memory with id {memory_id}.[/dim]")
+        raise typer.Exit(1)
+    console.print("[green]Forgotten.[/green]")
+
+
+@memory_app.command("add")
+def memory_add(
+    content: str = typer.Argument(..., help="e.g. 'Training for a marathon in March'"),
+    kind: str = typer.Option("fact", help="fact, goal, person or preference."),
+):
+    """Add a memory yourself. No LLM and no confirmation: you typed it."""
+    if kind not in MemoryKind.__args__:
+        console.print(f"[red]kind must be one of {', '.join(MemoryKind.__args__)}[/red]")
+        raise typer.Exit(1)
+    memory = Memory(id=memory_repo.new_id(), kind=kind, content=content, evidence=content, source_date=date.today())
+    memory_repo.put_memory(memory_repo.open_store(), memory)
+    console.print(f"[green]Remembered[/green] ({memory.id}).")
 
 
 @app.command()

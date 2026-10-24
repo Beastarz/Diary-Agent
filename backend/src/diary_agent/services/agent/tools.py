@@ -1,4 +1,5 @@
-"""Tools the chat agent can call. Read-only on purpose: writes go through extract -> confirm -> save.
+"""Tools the chat agent can call. None of them writes: entries go through extract -> confirm -> save,
+and remember_fact only *proposes* a memory; the confirm_memory node asks the user and writes it.
 
 Tool design for an 8B model:
 - Few tools, distinct names, docstrings that say *when* to use each one. The docstring and
@@ -13,12 +14,16 @@ Tool design for an 8B model:
 from datetime import date
 from typing import Annotated
 
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
+from langgraph.types import Command
 
 from diary_agent.models.entry import JournalEntry
+from diary_agent.models.memory import MemoryItem, MemoryKind
 from diary_agent.repositories import entry_repository as entry_repo
 from diary_agent.repositories import vector_repository as vector_repo
+from diary_agent.services import memory as memory_service
 from diary_agent.services.agent.state import DiaryContext
 
 SEARCH_K = 4
@@ -99,4 +104,33 @@ def get_entries_by_date(
     return "\n".join(lines)
 
 
-TOOLS = [search_entries, get_entries_by_date]
+@tool
+def remember_fact(
+    content: Annotated[str, "The whole fact as a short statement without 'I', keeping names, places and "
+                       "dates, e.g. 'Sister is named Mia', 'Training for a marathon in March'."],
+    kind: Annotated[MemoryKind, "goal, person, preference, or fact."],
+    runtime: ToolRuntime[DiaryContext],
+) -> Command | str:
+    """Save a lasting fact about the user to long-term memory, so future conversations know it.
+    Use this ONLY when the user explicitly asks you to remember something."""
+    if runtime.store is None:
+        return "Long-term memory is not available. Tell the user you can't save it right now."
+    content = content.strip()
+    if len(content) > memory_service.MAX_CONTENT_CHARS:
+        return f"Error: content must be at most {memory_service.MAX_CONTENT_CHARS} characters. Shorten it."
+    # llama3.1 sent content='I' for "Remember that I'm vegetarian" (evals/memory_probe.py).
+    if len(content.split()) < 2 or content.lower().startswith(("i ", "i'm ")):
+        return "Error: content must be the whole fact without 'I', e.g. 'Is vegetarian'. Call remember_fact again."
+    # The evidence is the user's request itself, not the model's paraphrase.
+    item = MemoryItem(evidence=runtime.state["user_input"], kind=kind, content=content)
+    proposals = memory_service.propose(runtime.store, [item], runtime.context.day, runtime.tool_call_id)
+    if not proposals:
+        return f"Already remembered: {content}. Tell the user you already knew this."
+    # A tool can update graph state by returning a Command; it must include its own ToolMessage.
+    # confirm_memory swaps this message's text for the user's answer once they've given it.
+    message = ToolMessage(f"Asked the user to confirm saving: {content}", tool_call_id=runtime.tool_call_id)
+    return Command(update={"messages": [message], "pending_memories": proposals})
+
+
+READ_TOOLS = [search_entries, get_entries_by_date]
+TOOLS = [*READ_TOOLS, remember_fact]

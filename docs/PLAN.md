@@ -14,8 +14,9 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M3 LangGraph conversion | ✅ done |
 | M4 Tools / ReAct agent | ✅ done |
 | M5 Summaries | ✅ done |
-| M6 Long-term memory | ⏭ next |
-| M7–M8 | todo |
+| M6 Long-term memory | ✅ done |
+| M7 Evals | ⏭ next |
+| M8 | todo |
 
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
@@ -23,6 +24,7 @@ Change log:
 - **M3:** `services/chat.py` replaced by `services/agent/` (StateGraph + `SqliteSaver`, thread_id = date). The router is rule-based only (slash commands + "check in" keyword); the LLM fallback waits for M7 routing evals. Deps go through LangGraph's `Runtime` context, not the state. The check-in is 4 code-chosen topics across turns, then extract → `interrupt()` → save. SQLite connections need `check_same_thread=False` because LangGraph runs nodes in worker threads.
 - **M4:** `chat_agent <-> tools` loop (`ToolNode` + `tools_condition`) with two read-only tools, `search_entries` (Chroma, cosine cutoff 0.43) and `get_entries_by_date`. There's **no `save_entry` tool**: writes stay behind `interrupt()`. `remember_fact` moves to M6. Entries are embedded on save; `diary reindex` rebuilds the index. `evals/tool_probe.py` drove four fixes: a date cheat-sheet in the prompt, no date args on search, a relevance cutoff, and a code gate that only offers tools for questions/requests (a prompt rule didn't stop llama's 75% false tool calls; the gate made it 0%). llama3.1 beat qwen3 on tool use (missed calls 7% vs 40%, date args 90% vs 43%), so it stays the default (see NOTES.md M4).
 - **M5:** `diary summary --week|--month [--date] [--saved]` covers calendar periods (Mon–Sun week, or a month). It runs map (condense each entry, `batch()`), then collapse (only when over budget), then reduce (structured `PeriodSummary`). All summary calls use `num_ctx=8192`. Mood numbers and recurring tags are computed in code. Summaries are saved to a `summaries` table in journal.db, after a yes/no. `/summary` in chat points to the CLI, so past days stay out of today's transcript. `evals/summary_probe.py` (3 cases) drove four fixes: the condense prompt no longer forces a length (that caused padding), a computed trend line was tried and removed (it hurt), the code writes the mood trend when fewer than 3 days are rated, and a guardrail drops "good mood" as a win (see NOTES.md M5).
+- **M6:** long-term memory in a `SqliteStore` (`data/store.db`, namespace `("user", "profile")`, semantic index on `content`), passed to `compile(store=...)`. Memories go into the system prompt (all of them up to 15, then goals plus the top-5 matches), never into `messages`. Two write paths, both confirmed by the user through `confirm_memory`'s `interrupt()`: `update_memory` after each save, and the `remember_fact` tool, which only stages a proposal. `diary memory list|add|forget`. `evals/memory_probe.py` drove four fixes: a less cautious extraction prompt (recall 6/12 → 5/6), a wrong-subject guardrail (the sister's move had been saved as the user's), per-tool gating so `remember_fact` is offered only for imperative "remember that…" (false saves 4/4 → 0), and rejecting 1-word tool content. It also showed that embedding similarity can't tell an update from a different fact, so the thresholds favour "add a second memory" over "overwrite" (see NOTES.md M6). Also fixed a missing newline in `REDUCE_SYSTEM` (prompt v1.9).
 - **2026-10-22:** qwen3 dropped from the project (lost on CJK leaks in M1 and tool use in M4). llama3.1:8b is the only chat model; evals still take `--models` for future comparisons.
 - **Structure (2026-09-28):** moved to a full-stack layout: `backend/` (layered `core / models / repositories / services / cli / api`) + `frontend/` placeholder, with the root as a uv workspace. See Project layout below.
 
@@ -53,20 +55,21 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
       models/                    pydantic data models only (no logic, no I/O)
         entry.py                 ✓ ExtractedEntry / JournalEntry
         summary.py               ✓ PeriodSummary / SummaryRecord
-        memory.py                M6: user facts
+        memory.py                ✓ MemoryItem / Memory
       repositories/              data access; the only place with SQL / vector DB calls
         entry_repository.py      ✓ SQLite entries (connect, save_entry, get_entry, list_entries)
         vector_repository.py     ✓ Chroma index (upsert_entry, search, count)
         summary_repository.py    ✓ SQLite summaries (save_summary, get_summary)
-        memory_repository.py     M6: LangGraph BaseStore wrapper
+        memory_repository.py     ✓ SqliteStore with a semantic index (put, search, list, delete)
       services/                  business logic
         extraction.py            ✓ structured extraction + retries + guardrails
         summary.py               ✓ map-reduce summaries + context budget + guardrails
+        memory.py                ✓ memory write policy (guardrails, dedupe, proposals) + prompt block
         agent/                   ✓ LangGraph agent (replaced M1's services/chat.py)
           state.py  nodes.py  graph.py   ✓ StateGraph + checkpointer + interrupt()
-          tools.py               ✓ @tool search_entries, get_entries_by_date (remember_fact in M6)
+          tools.py               ✓ @tool search_entries, get_entries_by_date, remember_fact
       cli/
-        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`, `reindex`, `summary`
+        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`, `reindex`, `summary`, `memory`
       api/                       HTTP API for the frontend (FastAPI, when a UI is built)
     tests/                       no Ollama; fakes; mirrors src/
       services/  services/agent/  repositories/   ✓
@@ -75,6 +78,7 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
     extract_probe.py             ✓ M2 mini eval (7 cases)
     tool_probe.py                ✓ M4 tool-use eval (14 cases, --models to compare, retrieval check)
     summary_probe.py             ✓ M5 summary probe (3 cases, --collapse forces the merge step)
+    memory_probe.py              ✓ M6 memory probe (extraction, similarity calibration, tool choice)
     datasets/*.jsonl  evaluators.py  run_evals.py   M7
   scripts/
     smoke.py                     ✓ Ollama connectivity check
@@ -104,7 +108,7 @@ Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to 
 **M5 — Summaries. ✅** `diary summary --week|--month`: fetch range → map (condense each entry) → reduce (trends in mood, recurring themes, wins) → optionally save as a summary record.
 *Learn:* map-reduce patterns, context-window budgeting on 8B models.
 
-**M6 — Long-term memory.** A LangGraph `store` (namespace `("user", "profile")`) holds facts, goals and people. An `update_memory` node runs after each session to extract durable facts, and relevant memories are injected into the system prompt. A `remember_fact` tool handles explicit "remember that…" requests.
+**M6 — Long-term memory. ✅** A LangGraph `store` (namespace `("user", "profile")`) holds facts, goals and people. An `update_memory` node runs after each session to extract durable facts, and relevant memories are injected into the system prompt. A `remember_fact` tool handles explicit "remember that…" requests.
 *Learn:* short-term (checkpointer) vs long-term (store) memory, memory write policies, avoiding memory pollution.
 
 **M7 — Evals (the main learning payoff).** `evals/` harness, run with `uv run python evals/run_evals.py`:

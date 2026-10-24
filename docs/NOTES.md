@@ -192,3 +192,47 @@ Final: grounded 9/9, low+high days named 6/6, recurring themes 3/3, no embellish
 - Put "2-3 sentences" back into `CONDENSE_SYSTEM` and look at the Oct 8 digest.
 - `uv run diary summary --month --date 2026-10-01` on your own journal, then `--saved` after saving it.
 - Set `num_ctx=2048` in `get_summary_model` and paste a long transcript into an entry: watch the start of the month disappear without an error.
+
+## M6: Long-term memory: the store, write policies, avoiding pollution
+- **Where to look:** `repositories/memory_repository.py`, `services/memory.py`, `models/memory.py`, `services/agent/nodes.py` (`update_memory`, `confirm_memory`, `tools_for`, `_companion_prompt`), `services/agent/tools.py` (`remember_fact`), `cli/app.py` (`diary memory list|add|forget`), `evals/memory_probe.py`, `tests/services/test_memory.py`, `tests/services/agent/test_memory_graph.py`
+- **Short-term vs long-term memory.** The checkpointer saves one *thread*: one day's conversation. Tomorrow is a new thread and starts blank. A **store** is shared by every thread: key-value documents under a namespace tuple, here `("user", "profile")`. You pass it to `compile(store=...)` and nodes and tools get it as `runtime.store`. It isn't part of `DiaryContext`: LangGraph owns it the same way it owns the checkpointer.
+- **The store does semantic search.** `SqliteStore(conn, index={"dims": 768, "embed": ..., "fields": ["content"]})` embeds `content` on `put()`, and `search(ns, query=...)` ranks results by cosine *similarity* (higher = closer, the opposite of Chroma's distance in M4). It uses sqlite-vec, which ships with `langgraph-checkpoint-sqlite` and works on Windows. Tests use `InMemoryStore` with the same index config.
+- **Read path: the system prompt, never `messages`.** `memory_block()` lists the memories in the system prompt for both chat and the check-in. Memories in `messages` would end up in the saved transcript and then in the extracted entry. A small profile (up to 15) goes in whole. Past that, it's goals plus the top-5 matches for this turn. Cost: one SQL read per turn, plus one embedding call only for a large profile.
+- **Two write paths, one gate.**
+  - `update_memory` runs after `save`: structured output (`MemoryCandidates`) over the day's transcript.
+  - `remember_fact` runs on "remember that …".
+  - Both only *propose*. `confirm_memory` interrupts once per proposal ("Remember this?") and writes only what you approve.
+  - The tool can't write either: it returns a `Command` that adds a proposal to `pending_memories` plus a placeholder `ToolMessage`. `confirm_memory` then **replaces that ToolMessage by id** (that's `add_messages`' replace rule) with the outcome, so the model's reply ("Got it") is based on what really happened.
+- **Why not `interrupt()` inside the tool?** ToolNode runs parallel tool calls in a thread pool, and several interrupts racing in one node is fragile. Staging in state is boring and safe. `pending_memories` has an appending reducer for the same reason: two `remember_fact` calls in one step would otherwise be two writes to a plain key (an error).
+- **Write after `interrupt()` is fine.** `confirm_memory` writes in the same node, after `interrupt()`. On resume the node re-runs from the top, but only that run gets past `interrupt()`. Contrast `confirm → save`, which split the write into its own node. Both patterns are valid; what matters is that nothing *before* `interrupt()` has side effects.
+- **Write policy (`apply_memory_guardrails`).** The quote must be the user's words (≥80% word overlap with `User:` lines). Content can't be a one-day state ("today", "tonight"…). It's capped at 120 chars, there are no repeats, and nothing about *someone else* is stored as a fact about you (see below). Then `propose()` dedupes against the store by similarity.
+
+### What the probe found (evals/memory_probe.py)
+| Change | Failure it fixed (llama3.1) | Before → after |
+|---|---|---|
+| Dropped "usually empty / empty is the normal answer" from the extraction prompt; added clue phrases ("I've been … for years", "I always …") | Too cautious: missed the job, a routine and "learning Spanish for a year" | recall 6/12 → 5/6 |
+| Guardrail: a quote about he/she/they with no I/my/me can only make a `person` memory | From "my sister Mia… *She* just moved back to Leeds" it saved **"Lives in Leeds"** about the user | pollution 1 → 0 |
+| `tools_for()`: `remember_fact` offered only for an imperative "remember that…/don't forget…" | Offered on any "remember", it saved "Remember when I ran the 10k?" and "I remember the beach trip" **every time** | false saves 4/4 → 0/4 |
+| `content` arg description "keep names", plus code rejects 1-word or "I …" content | "my sister's name is Mia" → `content: 'My sister'`; "I'm vegetarian" → `content: 'I'` | names kept; bad content becomes an error the model can retry |
+
+Final: extraction recall 5/6 with **0 memories kept that shouldn't be** (mood, plans, the assistant's suggestions and small talk all came back empty). Tool choice was right 9/10.
+
+**Similarity doesn't mean "same fact".** With nomic-embed-text, rewordings of one fact score 0.83–0.94, real updates 0.55–0.75, and different facts 0.38–0.58. "Lives in London" → "Moved to Leeds" (0.55) is indistinguishable from "Sister Mia" vs "Brother Tom" (0.58). So the thresholds avoid the error that *loses data*: `DUPLICATE_SCORE = 0.90` (skip), and `RELATED_SCORE = 0.70` with the same kind proposes a replacement, shown as old → new. A missed update just leaves two memories.
+
+### Lessons
+- **Memory errors compound.** A wrong entry is one bad row. A wrong memory is injected into *every* future prompt. That's why every write is confirmed and the guardrails lean toward dropping.
+- **Precision before recall.** The first prompt was too cautious, the second too eager (wrong subject). The fix for "too eager" was code, not more prompt.
+- **The code gate pattern from M4 works per tool.** Don't just decide *whether* tools are offered. Decide *which* ones.
+- **Embeddings measure topic.** Use them to find candidates, not to decide whether two facts are the same.
+
+### Known limits
+- Value-change updates (moved city, changed job) are added as a second memory, not an update. Fix by hand with `diary memory forget`. An LLM "same fact?" check is an option for later.
+- A declined candidate is proposed again after the next save the same day (nothing remembers the "no").
+- `update_memory` only runs after a save. A chat-only day contributes nothing unless you say "remember…".
+- The probe has 8 transcripts and runs at temperature 0, so repeated runs are identical. M7 should add more cases and real paraphrases.
+
+### Try this
+- `uv run python evals/memory_probe.py --part similarity`, then add your own pairs to `PAIRS`.
+- Remove the `THIRD_PERSON` guardrail and rerun `--part extract`: watch the sister's move become yours.
+- In `diary chat`: "Remember that I'm training for a marathon", say yes, then tomorrow ask "what are my goals?". Check `diary memory list`.
+- Change `MEMORY_REQUEST` back to `\bremember\b` and run `--part tool`.

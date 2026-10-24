@@ -38,6 +38,7 @@ uv run diary list                  # recent entries
 uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat)
 uv run diary reindex               # rebuild the search index from saved entries
 uv run diary summary [--week|--month] [--date YYYY-MM-DD]   # map-reduce review; --saved shows the stored one
+uv run diary memory list            # what the agent remembers about you (also: add "...", forget <id>)
 uv run python evals/extract_probe.py   # mini eval of entry extraction (needs Ollama)
 uv run python evals/tool_probe.py      # tool-use eval; --models a b to compare (needs Ollama)
 uv run python evals/summary_probe.py   # summary grounding probe; --collapse forces the merge step (needs Ollama)
@@ -52,7 +53,7 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 - [x] M3 LangGraph: state graph, checkpointing, human-in-the-loop
 - [x] M4 Tools + RAG over past entries (ask "what did I do yesterday?" in chat)
 - [x] M5 Weekly/monthly summaries (map-reduce, `diary summary`)
-- [ ] M6 Long-term memory about you
+- [x] M6 Long-term memory about you (store, `remember that…`, `diary memory`)
 - [ ] M7 Evals: component, retrieval, trajectory, LLM-as-judge, simulated users
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full design and [`docs/NOTES.md`](docs/NOTES.md) for what each milestone teaches.

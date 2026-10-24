@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from diary_agent.services.agent.nodes import LOOKUP_REQUEST, calendar_hint
+from diary_agent.services.agent.nodes import LOOKUP_REQUEST, calendar_hint, tools_for
 
 
 def test_calendar_hint_for_a_thursday():
@@ -39,3 +39,19 @@ def test_calendar_hint_on_a_monday_crosses_the_month():
 )
 def test_tools_are_only_offered_for_questions_and_requests(text, offered):
     assert bool(LOOKUP_REQUEST.search(text)) is offered
+
+
+@pytest.mark.parametrize(
+    ("text", "offered"),
+    [
+        ("Remember that I'm training for a marathon.", ["search_entries", "get_entries_by_date", "remember_fact"]),
+        ("please remember my sister is called Mia", ["search_entries", "get_entries_by_date", "remember_fact"]),
+        ("Don't forget I hate mornings", ["search_entries", "get_entries_by_date", "remember_fact"]),
+        ("Remember when I ran the 10k?", ["search_entries", "get_entries_by_date"]),  # a lookup, not a save
+        ("I remember the beach trip with my dad", []),  # a statement
+        ("What did I do yesterday?", ["search_entries", "get_entries_by_date"]),
+        ("I'm training for a marathon.", []),
+    ],
+)
+def test_remember_fact_is_only_offered_for_remember_requests(text, offered):
+    assert [t.name for t in tools_for(text)] == offered

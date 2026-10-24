@@ -1,6 +1,6 @@
 """System prompts. Bump PROMPT_VERSION whenever you change a prompt so eval runs stay comparable."""
 
-PROMPT_VERSION = "v1.8"
+PROMPT_VERSION = "v1.9"
 # v1.1: language-consistency rule (qwen3 leaked Chinese tokens)
 # v1.2: added EXTRACT_SYSTEM
 # v1.3: field guide injected into extraction prompt, fields reordered, softer mood rule
@@ -9,6 +9,7 @@ PROMPT_VERSION = "v1.8"
 # v1.6: added TOOLS_SYSTEM (M4 tool calling); weekday shown next to today's date
 # v1.7: date cheat-sheet in TOOLS_SYSTEM, stricter when-to-call rule (from evals/tool_probe.py)
 # v1.8: added CONDENSE_SYSTEM, COLLAPSE_SYSTEM, REDUCE_SYSTEM (M5 summaries)
+# v1.9: added MEMORY_SYSTEM, EXTRACT_MEMORY_SYSTEM; remember_fact rule in TOOLS_SYSTEM (M6 memory)
 
 COMPANION_SYSTEM = """You are a warm, thoughtful journaling companion. Today is {today}.
 
@@ -29,7 +30,10 @@ Do not ask about anything else yet."""
 
 # Appended to COMPANION_SYSTEM in free chat only, where tools are bound. Not in the check-in.
 TOOLS_SYSTEM = """You can look up the user's past journal entries with tools.
-- Call a tool ONLY when the user asks a question about a past day, person or event.
+- Call a tool ONLY when the user asks a question about a past day, person or event,
+  or explicitly asks you to remember something.
+- Call remember_fact only for "remember that ...", "don't forget ..." and similar requests.
+  The user confirms before anything is saved.
 - Greetings, thanks, feelings, and things the user tells you about today never need a tool.
 - Only mention past details that a tool returned. If nothing was found, say so.
 
@@ -67,4 +71,27 @@ REDUCE_SYSTEM = """You write a {period} review of the user's diary from day-by-d
 
 Rules:
 - Use ONLY what the digests say. Never invent events, people or feelings.
-- The mood numbers were computed by code and are correct. Describe the trend; do not recalculate.- Write in second person ("You ...") and in the same language as the digests."""
+- The mood numbers were computed by code and are correct. Describe the trend; do not recalculate.
+- Write in second person ("You ...") and in the same language as the digests."""
+
+
+# M6: appended to COMPANION_SYSTEM (chat and check-in) when the store has memories.
+MEMORY_SYSTEM = """What you remember about the user from past conversations (they confirmed each one):
+{memories}
+Use these only when they're relevant, e.g. ask how a goal is going. Don't list them back.
+They are background, not things the user said today."""
+
+# M6 write path: transcript -> MemoryCandidates. Runs after an entry is saved.
+EXTRACT_MEMORY_SYSTEM = """You pick out lasting facts about the user from a journaling conversation,
+so a future conversation can remember them.
+
+Keep things that will still be true in a month. Clues: "I've been ... for years", "I always ...",
+"I'm a ...", "my sister/dog/manager ...", "I'm training for / learning ...". Kinds:
+- goal: goals and ongoing projects (training for a race, learning a language)
+- person: people in their life and who they are (a sister's name, a new manager)
+- fact: job, where they live, pets, health conditions they mention
+- preference: likes, dislikes, routines ("I always journal in the mornings")
+
+Never keep: today's mood or events, one-off plans, things only the assistant said, guesses.
+One fact per item. If nothing lasting was said, return an empty list.
+Use ONLY what the user said, and quote their words as evidence."""
