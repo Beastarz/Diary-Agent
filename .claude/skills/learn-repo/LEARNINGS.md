@@ -1,124 +1,141 @@
 # Repo learnings (AI-maintained)
 
-last_synced_commit: 2253cab
-last_synced: 2026-10-20
-current_milestone: M3 done, M4 (tools / ReAct) next
+last_synced_commit: ae6356f
+last_synced: 2026-10-24
+current_milestone: M4 done, M5 (summaries) next
 
 > Maintained by the `learn-repo` skill. The code map and concept index live here. The narrative, experiments, and eval tables live in `docs/NOTES.md`. Roadmap lives in `docs/PLAN.md`.
 
-## End-to-end flow (as of M3)
+## End-to-end flow (as of M4)
 
-Layers: `cli/` → `services/` → `repositories/` → `models/`; `core/` (config, llm, prompts) is used everywhere. Paths below are under `backend/src/diary_agent/`.
+Layers: `cli/` → `services/` → `repositories/` → `models/`; `core/` (config, llm, prompts) is used everywhere. Paths below are under `backend/src/diary_agent/`. The full ASCII graph is drawn in the `graph.py` module docstring.
 
 ```
 uv run diary chat  (cli/app.py → chat())
-  ├─ DiaryContext(chat_model, extractor, conn, day, model_name)   deps, passed via context=, never checkpointed
+  ├─ DiaryContext(chat_model, extractor, conn, vectors, day, model_name)   deps, via context=, never checkpointed
   ├─ build_graph(open_checkpointer())   SqliteSaver → data/checkpoints.db
   ├─ thread_config(day)                 thread_id = today's date → resume after restart
   └─ each user line → run_turn → stream_turn(graph, {"user_input": text}) = ONE graph run
        START → router (rule-based: /save /summary /cancel /checkin, "check in" keyword, mode)
-         ├─ chat_agent: COMPANION_SYSTEM + all messages → chat_model  → END
-         ├─ checkin:    + CHECKIN_SYSTEM(topic = CHECKIN_TOPICS[step]), step+1 → END
+         ├─ chat_agent ⇄ tools   (ReAct loop, M4)
+         │    LOOKUP_REQUEST gate: no "?" / request verb → plain invoke, no tools → END
+         │    else COMPANION_SYSTEM + TOOLS_SYSTEM(calendar_hint) → chat_model.bind_tools(TOOLS)
+         │    tools_condition: tool_calls? → ToolNode(TOOLS) → ToolMessages → back to chat_agent
+         │    no tool_calls (or MAX_TOOL_ROUNDS=3 used, tool_calls dropped) → END
+         │    tools: search_entries (Chroma, cutoff 0.43 → dates → SQLite) | get_entries_by_date (SQLite)
+         ├─ checkin:    + CHECKIN_SYSTEM(topic = CHECKIN_TOPICS[step]), step+1 → END   (no tools)
          ├─ summarize:  stub notice (M5) → END
          ├─ done (/cancel) → END
-         └─ extract: extract_entry (M2 pipeline, unchanged) → draft as JSON dict
-              └─ confirm: interrupt({draft, exists}) ── graph pauses + checkpoints
+         └─ extract: format_transcript (drops tool msgs) → extract_entry → draft dict
+              └─ confirm: interrupt({draft, exists}) ── pause + checkpoint
                    CLI: pending_interrupt → ask_to_save → run_turn(Command(resume=True/False))
-                   ├─ True  → save: JournalEntry(**draft, code-known fields) → entry_repo.save_entry → END
+                   ├─ True  → save: SQLite save_entry, then vector_repo.upsert_entry (failure → "run reindex") → END
                    └─ False → END ("Not saved.")
-       stream_mode=["messages","updates"]: tokens only from REPLY_NODES; "updates" → status line
+       stream_mode=["messages","updates"]: tokens only from REPLY_NODES; updates → status
+         ("Writing up your entry...", "Searching your journal...")
   exit → unsaved (len(messages) > saved_count)? → offer /save
-uv run diary list / show → entry_repo.list_entries / get_entry
+uv run diary list / show / reindex (rebuild Chroma from SQLite)
 ```
 
 ## File map
 
 | File | What it does | Key symbols | Concepts it teaches |
 |---|---|---|---|
-| `backend/src/diary_agent/core/config.py` | Env/.env-driven frozen settings | `Settings`, `settings`, `PROJECT_ROOT` | Config in one place; model choice is config, not code |
-| `backend/src/diary_agent/core/llm.py` | Model factories | `get_chat_model(temperature, max_tokens)`, `get_embeddings()` | Depend on `BaseChatModel` interface; provider swap = one file; `reasoning` flag only sent when on |
-| `backend/src/diary_agent/core/prompts.py` | System prompts + version | `PROMPT_VERSION` (v1.5), `COMPANION_SYSTEM`, `CHECKIN_SYSTEM`, `EXTRACT_SYSTEM` | Prompt versioning so eval runs are comparable; CHECKIN_SYSTEM is appended, code picks the topic |
-| `backend/src/diary_agent/services/agent/state.py` | Graph state + run deps | `DiaryState(MessagesState)`, `DiaryContext`, `Route` | State (checkpointed, serializable) vs context (deps); `add_messages` reducer appends, other keys overwrite |
-| `backend/src/diary_agent/services/agent/nodes.py` | Node functions | `router`, `route_after_router`, `chat_agent`, `checkin`, `summarize`, `extract`, `route_after_extract`, `confirm`, `save`, `CHECKIN_TOPICS` | Nodes return partial updates; deterministic router; `interrupt()` + `Command(goto=)`; write split out of the interrupting node |
-| `backend/src/diary_agent/services/agent/graph.py` | Wiring + runtime helpers | `build_graph`, `open_checkpointer`, `thread_config`, `stream_turn`, `pending_interrupt`, `REPLY_NODES` | `StateGraph`, conditional edges, `SqliteSaver`, thread_id, dual stream modes, `get_state().interrupts` |
-| `backend/src/diary_agent/models/entry.py` | Pydantic schemas | `ExtractedEntry` (LLM-inferred), `JournalEntry` (+ code-known fields) | Two-layer schema; all fields required; bounded lists; field order = evidence before judgement |
-| `backend/src/diary_agent/services/extraction.py` | Transcript → entry | `build_extractor`, `extract_entry`, `apply_guardrails`, `field_guide`, `format_transcript`, `ExtractionError` | Structured output, retry-with-error-feedback, deterministic guardrails, schema as single source of truth for prompt |
-| `backend/src/diary_agent/repositories/entry_repository.py` | SQLite repo | `connect` (`check_same_thread=False`), `save_entry` (INSERT OR REPLACE), `get_entry`, `list_entries`, `LIST_FIELDS` | Lists stored as JSON text; pydantic round-trip via `model_validate` |
-| `backend/src/diary_agent/cli/app.py` | Typer CLI, thin driver of the graph | `chat`, `run_turn`, `ask_to_save`, `list_cmd`, `show`, `render_entry` | CLI answers interrupts and resumes; resume-on-start (incl. a paused interrupt); BOM strip for PowerShell piping |
-| `scripts/smoke.py` | Ollama connectivity check | — | `.stream()`, embedding dim (768) |
-| `evals/extract_probe.py` | M2 mini eval: 7 cases × N runs | `CASES`, `check()` | Deterministic checks, mood *ranges*, `forbidden` words, repeated runs for nondeterminism. Seed of the M7 harness |
-| `backend/tests/services/test_extraction.py` | Retry + guardrail tests | `scripted()` fake extractor via `RunnableLambda` | Test LLM control flow with scripted fakes |
-| `backend/tests/services/agent/test_router.py` | Router unit tests | parametrized routes | A deterministic router is testable without any model |
-| `backend/tests/services/agent/test_graph.py` | Graph behaviour tests | restart, separate days, interrupt approve/decline, check-in, `stream_turn` | Fake models + temp checkpointer; regression test runs through `stream_turn` (the CLI's path) |
-| `backend/tests/repositories/test_entry_repository.py` | SQLite round-trip tests | — | Repo layer tested in isolation |
+| `core/config.py` | Env/.env-driven frozen settings | `Settings`, `settings`, `PROJECT_ROOT` | Config in one place; model choice is config, not code |
+| `core/llm.py` | Model factories | `get_chat_model`, `get_embeddings()` (nomic-embed-text, 768-dim) | Depend on `BaseChatModel`; provider swap = one file |
+| `core/prompts.py` | System prompts + version | `PROMPT_VERSION` (v1.7), `COMPANION_SYSTEM`, `CHECKIN_SYSTEM`, `TOOLS_SYSTEM`, `EXTRACT_SYSTEM` | Prompt versioning; TOOLS_SYSTEM appended only when tools are bound; `{calendar}` filled by code |
+| `services/agent/state.py` | Graph state + run deps | `DiaryState(MessagesState)`, `DiaryContext` (+ `vectors`), `Route` | State (checkpointed) vs context (deps); `add_messages` appends |
+| `services/agent/nodes.py` | Node functions | `router`, `chat_agent`, `LOOKUP_REQUEST`, `calendar_hint`, `_tool_rounds_this_turn`, `MAX_TOOL_ROUNDS`, `GAVE_UP`, `checkin`, `extract`, `confirm`, `save` | Code gate on *whether* tools are offered; code does date math; loop budget; save indexes after SQLite |
+| `services/agent/tools.py` | Read-only tools | `search_entries`, `get_entries_by_date`, `format_entry`, `_parse_range`, `MAX_DISTANCE`, `SEARCH_K`, `MAX_LISTED`, `TOOLS` | `@tool` docstring + `Annotated` args = the whole schema; `ToolRuntime[DiaryContext]` hidden from model; errors as strings; distance cutoff; capped output |
+| `services/agent/graph.py` | Wiring + runtime helpers | `build_graph` (ToolNode, `tools_condition`), `stream_turn`, `pending_interrupt`, `REPLY_NODES` | Loop = conditional edge + edge back; `isinstance(chunk, AIMessage)` (chunks are a subclass) |
+| `repositories/vector_repository.py` | Chroma index, one vector per day | `open_store` (cosine, telemetry off), `entry_text`, `upsert_entry` (id = date), `search` → `(date, distance)`, `_day_key`, `DOC_PREFIX`/`QUERY_PREFIX`, `count` | Vector store as a rebuildable index, SQLite is truth; embed extracted fields, not transcript; nomic task prefixes; numeric date metadata for `$gte` |
+| `models/entry.py` | Pydantic schemas | `ExtractedEntry` (LLM-inferred), `JournalEntry` (+ code-known fields) | Two-layer schema; all fields required; bounded lists; evidence before judgement |
+| `services/extraction.py` | Transcript → entry | `build_extractor`, `extract_entry`, `apply_guardrails`, `field_guide`, `format_transcript` | Structured output, retry-with-feedback, guardrails; transcript = only human/ai with content |
+| `repositories/entry_repository.py` | SQLite repo | `connect` (`check_same_thread=False`), `save_entry`, `get_entry`, `list_entries(start, end)` | Lists as JSON text; pydantic round-trip |
+| `cli/app.py` | Typer CLI, thin graph driver | `chat`, `run_turn`, `ask_to_save`, `list_cmd`, `show`, `reindex` | CLI answers interrupts; resume-on-start; `reindex` repairs the index |
+| `evals/extract_probe.py` | M2 extraction eval, 7 cases × N | `CASES`, `check()` | Deterministic checks, mood ranges, repeats |
+| `evals/tool_probe.py` | M4 tool-use eval, 14 cases × N, real graph | `TODAY` (fixed Thursday), `SEED` (10 entries), checks tool/args/answer/clean + model-free retrieval | Split missed-call vs false-call rates; separate retrieval from reasoning; results JSON tagged model + prompt + commit |
+| `backend/tests/conftest.py` | Shared fakes | `KeywordEmbeddings`, `embeddings` fixture | Bag-of-words fake so search *ranking* is testable without Ollama |
+| `backend/tests/services/agent/test_tools.py`, `test_chat_helpers.py`, `repositories/test_vector_repository.py` | Tool, gate/calendar, Chroma tests | — | Tools tested directly with a fake runtime; cutoff and upsert-replaces behaviour |
+| `backend/tests/services/agent/test_graph.py` | Graph behaviour | restart, interrupt, check-in, tool loop, tool msgs kept out of extraction | Fake models scripted with tool_calls; test via `stream_turn` |
+| `.github/workflows/ci.yml`, `dependabot.yml` | CI: pytest on ubuntu + windows; privacy guard | `privacy` job greps `git ls-files` for data/, *.db, chroma/, .env | Evals need Ollama, so CI runs only fake-backed tests; a diary must never be published |
+| `scripts/smoke.py` | Ollama connectivity check | — | `.stream()`, embedding dim |
 
 ## Concept index
 
-### M0: Models and messages
-- **Chat model + messages:** `SystemMessage`/`HumanMessage`/`AIMessage` in, `AIMessage` out. `core/llm.py`, `scripts/smoke.py`.
-- **invoke vs stream:** whole reply vs chunks. `ChatSession.stream`.
-- **Embeddings:** text → 768-dim vector (nomic-embed-text), unused until M4 RAG. `get_embeddings()`.
-
-### M1: LCEL and history
-- **LCEL / Runnables:** `prompt | model | parser`. Every Runnable gets invoke/stream/batch. `chat.build_chain`.
-- **Stateless model:** "memory" = resending history each call. M1 kept it in `ChatSession.history` (deleted in M3); now it lives in `DiaryState.messages`. Still resent in full each turn; trimming comes in M6.
-- **Tests vs evals:** unit tests check plumbing with fakes. Evals measure real model quality. See NOTES.md → M1.
-- **First eval (CJK leak):** fixed inputs + regex checker + repeats → switched default to llama3.1:8b. NOTES.md → M1 "Observed failure".
+### M0–M1: Models, LCEL, history (compressed)
+- Chat model takes/returns messages; invoke vs stream; embeddings = text → vector (`core/llm.py`).
+- LCEL `prompt | model | parser`; every Runnable has invoke/stream/batch.
+- Model is stateless: "memory" = resending history (now `DiaryState.messages`; trimming in M6).
+- Tests (fakes, plumbing) vs evals (real model quality). First eval = CJK leak → llama3.1. NOTES M1.
 
 ### M2: Structured output and guardrails
-- **`with_structured_output(method="json_schema", include_raw=True)`:** returns `{raw, parsed, parsing_error}`, which enables retry with feedback. `extract.build_extractor`.
-- **Grammar-constrained decoding (Ollama):** guarantees structure, not content. Only *required* fields are forced, and descriptions aren't seen by the model. `models/entry.py` docstring.
-- **Retry with error feedback:** show the model its bad output + the validation error. `extract_entry`.
-- **Deterministic guardrails > prompt tweaks** for rules checkable in code. They can't regress other cases. `apply_guardrails`.
-- **Never ask the model for what code knows:** date, transcript, model, and version come from code. `JournalEntry`.
-- **Human-in-the-loop writes:** confirm save and overwrite. `cli.save_flow`.
-- **Eval hygiene:** rerun the whole suite after every change; sometimes the label is wrong; temp 0 isn't deterministic; 100% = eval too easy. NOTES.md → M2 "eval loop".
+- **`with_structured_output(method="json_schema", include_raw=True)`** → `{raw, parsed, parsing_error}` enables retry with feedback. `build_extractor`.
+- **Grammar-constrained decoding** guarantees structure, not content; only *required* fields forced; descriptions not seen → `field_guide`.
+- **Deterministic guardrails > prompt tweaks** for code-checkable rules. `apply_guardrails`.
+- **Never ask the model for what code knows** (date, transcript, model, version). `JournalEntry`.
+- **Eval hygiene:** rerun everything after a change; labels can be wrong; temp 0 ≠ deterministic. NOTES M2.
 
 ### M3: LangGraph (state, nodes, edges, checkpoints, interrupts)
-- **StateGraph = nodes + edges over a shared state.** A node is `(state, runtime) -> partial update`. `graph.build_graph`.
-- **State vs context:** `DiaryState` = data, checkpointed after every node, must serialize (so `draft` is a dict, not a pydantic model). `DiaryContext` = deps, passed fresh via `context=`, read as `runtime.context`. Rule: survives a restart → state; a tool you use → context.
-- **Reducers:** `messages` uses `add_messages` (append); other keys are last-write-wins.
-- **Conditional edge vs `Command`:** router writes `route`, edge reads it (routing visible in graph.py). `confirm` returns `Command(goto=…, update=…)` (decide + update in one step).
-- **Multi-turn flow without a loop:** one invoke = one user turn; `mode` + `checkin_step` in state tell the next turn's router where we are. Code picks the topic, the model words it.
-- **Commands stay out of `messages`:** `/save` never pollutes the transcript the extractor reads; status goes through `notice`.
-- **Checkpointer = short-term memory:** `SqliteSaver`, `thread_id` = date. Restart resumes; tomorrow is a new thread. `get_state_history` shows every step.
-- **`interrupt()` = HITL:** pauses + checkpoints; resume with `Command(resume=value)`, which becomes interrupt()'s return. **Node reruns from the top on resume**, so only idempotent work before it (DB read OK; write is in `save`).
-- **Streaming:** `stream_mode=["messages","updates"]`; filter tokens by `meta["langgraph_node"]` so extraction JSON isn't printed.
-- **Test the path users run:** worker-thread SQLite crash passed `invoke` tests, failed in `stream`. NOTES.md → M3 "Bug found by running".
+- **StateGraph** = nodes `(state, runtime) -> partial update` + edges. `build_graph`.
+- **State vs context:** serializable data (checkpointed) vs deps (`runtime.context`). Rule: survives a restart → state.
+- **Reducers:** `messages` appends; other keys last-write-wins.
+- **Conditional edge vs `Command(goto=, update=)`.** Router + edge for visible routing; `confirm` decides + updates.
+- **Multi-turn without a loop:** `mode`/`checkin_step` in state; code picks topic, model words it.
+- **Checkpointer = short-term memory:** `SqliteSaver`, thread_id = date.
+- **`interrupt()` = HITL;** resume with `Command(resume=…)`; **node reruns from the top**, so writes live in `save`.
+- **Streaming filter:** `meta["langgraph_node"] in REPLY_NODES`. Worker-thread SQLite bug only showed in `stream`. NOTES M3.
+
+### M4: Tools, ReAct, RAG, tool evals
+- **ReAct loop = graph cycle:** `chat_agent` → `tools_condition` → `ToolNode` → back. Still one invoke per user turn. `build_graph`.
+- **A tool is name + docstring + arg schema; that's all the model sees.** Docstring says *when* to use it. `ToolRuntime` injects `DiaryContext`, hidden from schema. `tools.py`.
+- **Narrow args, validated in code;** errors returned as strings so the model can retry (`ToolNode` also catches exceptions). Optional date args on search got junk (`0000-00-00`) → removed.
+- **Read-only tools on purpose:** no `save_entry` tool; writes stay behind `interrupt()`.
+- **RAG:** embed on save (extracted fields, not transcript), id = date (upsert), search returns dates, SQLite returns entries. Index is rebuildable (`diary reindex`); index failure doesn't fail the save.
+- **kNN always returns k → need a relevance cutoff** (`MAX_DISTANCE`), or the model "finds" a ski trip in a pottery entry.
+- **Move decisions the model is bad at into code:** `calendar_hint` (date math: 50% → 90% args) and `LOOKUP_REQUEST` gate (false tool calls 75% → 0%; the prompt rule changed nothing).
+- **Loop budget:** `MAX_TOOL_ROUNDS = 3`; then call without tools and strip any tool_calls.
+- **Keep tool traffic out of the entry:** `format_transcript` drops tool messages, or past days leak into today.
+- **Measure tool use with split rates:** missed-call vs false-call (llama over-calls, qwen3 under-calls). Model-free retrieval check (recall 4/4) separates search from reasoning. NOTES M4.
 
 ## Decision log
 
 | Decision | Why | Where |
 |---|---|---|
-| Default model llama3.1:8b over qwen3:8b | qwen3 leaked CJK in 1–3/9 replies; llama 0/27 | `core/config.py`, NOTES M1 |
+| Default llama3.1:8b; qwen3 dropped 2026-10-22 | qwen3 CJK leaks (M1); missed 40% of tool calls, date args 43% vs llama 90% (M4) | `core/config.py`, NOTES M1/M4 |
 | All schema fields required, lists capped | Optional fields skipped; unbounded list looped forever | `models/entry.py` |
-| Field descriptions injected into prompt | Grammar doesn't pass descriptions to the model | `services/extraction.field_guide` |
-| Evidence fields before `mood` | Model writes JSON top-down; judge after facts | `ExtractedEntry` field order |
-| Extraction at temperature 0, `num_predict=512` | Most likely reading; runaway safety cap | `get_extraction_model` |
+| Field descriptions injected into prompt | Grammar doesn't pass descriptions to the model | `field_guide` |
 | Guardrails in code for gratitude and mood_words | Prompt fix v1.4 regressed another case | `apply_guardrails` |
-| Full-stack layout: `backend/` (core / models / repositories / services / cli / api) + `frontend/` placeholder; root is a uv workspace | User asked for a traditional full-stack structure with data models kept separate. Layer rule: cli/api → services → repositories → models, and core is usable everywhere. The workspace keeps `uv run …` working from the root | root + `backend/pyproject.toml`, `docs/PLAN.md` |
-| Rule-based router, no LLM fallback yet | Cheap, instant, testable; add LLM fallback only once M7 routing evals can measure it ("check in at the hotel" misfires) | `nodes.router`, PLAN M3 |
-| Deps in `Runtime` context, not state | Models / DB connections aren't serializable and shouldn't be checkpointed | `state.DiaryContext` |
-| Separate `save` node after `confirm` | `interrupt()` reruns the node on resume; keep side effects out of it | `nodes.confirm` / `nodes.save` |
-| thread_id = date | One resumable conversation per day, matches one entry per day | `graph.thread_config` |
-| `check_same_thread=False` on SQLite | LangGraph runs sync nodes in worker threads when streaming; one node at a time, so safe | `entry_repository.connect`, `graph.open_checkpointer` |
-| One entry per day, confirm overwrite | Simple model; human approves destructive writes | `repositories/entry_repository.py`, `cli/app.save_flow` |
+| Full-stack layout, uv workspace | User wanted traditional layers; `uv run` works from root | root + `backend/pyproject.toml` |
+| Rule-based router, no LLM fallback yet | Cheap, testable; add LLM fallback once M7 can measure it | `nodes.router` |
+| Deps in `Runtime` context, not state | Not serializable, shouldn't be checkpointed | `DiaryContext` |
+| Separate `save` node after `confirm` | `interrupt()` reruns the node on resume | `confirm` / `save` |
+| thread_id = date | One resumable conversation per day = one entry per day | `thread_config` |
+| `check_same_thread=False` on SQLite | Streaming runs sync nodes in worker threads | `entry_repository.connect` |
+| Only read-only tools; no `save_entry` tool | Model must never write without a human yes | `tools.py` |
+| Code gate (`LOOKUP_REQUEST`) decides if tools are offered | Prompt rule left false calls at 75%; gate → 0% | `chat_agent` |
+| Date cheat-sheet instead of letting model compute dates | 8B model got "Monday this week" wrong | `calendar_hint`, v1.7 |
+| `search_entries` has only `query` | Optional date args filled with junk | `tools.py` docstring |
+| Cosine cutoff 0.43 | Relevant ≤ 0.41, unrelated ≥ 0.45 on 10-entry seed; kNN invents matches otherwise | `MAX_DISTANCE` |
+| Chroma = index, SQLite = truth; embed extracted fields | Index rebuildable; transcript chit-chat is noise | `vector_repository` |
+| CI runs fake-backed tests on Windows too + privacy guard | M4 hit Windows-only bugs; diary data must never be tracked | `.github/workflows/ci.yml` |
 
 ## Open questions / coming next
-- M4: `chat_agent` becomes a tool-calling agent (`ToolNode` + `tools_condition`) with `search_entries` (Chroma), `get_entries_by_date`, `save_entry`; entries embedded on save. Motivated by the M3 hallucinated "laughter" detail (NOTES M3).
-- Known M3 limits: keyword router misfires; full history resent each turn (M6); a chat past midnight stays on yesterday's thread until restart.
-- ~~M4: will qwen3 beat llama3.1 at tool calling?~~ No (tool_probe: missed calls 40% vs 7%). qwen3 dropped 2026-10-22.
-- Probe gaps: "8 out of 10" became a highlight, and a `work` tag landed on a dentist trip. No checks on tags or highlights yet (M7).
+- M5: summaries (`summarize` node is still a stub; `diary summary` command).
+- Known M4 limits: `LOOKUP_REQUEST` needs "?" or a leading request verb; `MAX_DISTANCE` calibrated on only 10 synthetic entries; the assistant's reply about a past day stays in today's transcript (extraction could pick it up — watch in M7).
+- Known M3 limits: keyword router misfires; full history resent each turn (M6); past-midnight chat stays on yesterday's thread.
+- M7: LLM judge to replace keyword checkers (several "failures" were checker misses); checks on tags/highlights.
 
 ## Learner progress
 | Topic | Status (solid / shaky / not yet) | Evidence / date |
 |---|---|---|
 | Required fields + grammar (optional = skipped) | solid | M2 quiz Q2 correct, 2026-09-28 |
-| Bounded lists / runaway generation | solid-ish | M2 quiz Q4: got max_length; didn't mention num_predict as backstop, 2026-09-28 |
-| Two-layer schema (ExtractedEntry vs JournalEntry) | shaky | M2 quiz Q1: said "mood" (it's LLM-inferred); answer is date/transcript/model/prompt_version, 2026-09-28 |
+| Bounded lists / runaway generation | solid-ish | M2 quiz Q4: got max_length; missed num_predict backstop, 2026-09-28 |
+| Two-layer schema (ExtractedEntry vs JournalEntry) | shaky | M2 quiz Q1: said "mood" is code-known, 2026-09-28 |
 | Grammar doesn't pass descriptions → field_guide | shaky | M2 quiz Q3: guessed "second validation", 2026-09-28 |
-| Guardrails in code vs prompt rules | not yet | M2 quiz Q5: "no idea", 2026-09-28. Revisit with the v1.4 regression story |
-| State vs context (M3) | shaky | M3 quiz Q1: put chat model in state; got messages right. Q2: didn't connect dict draft to checkpoint serialization, 2026-10-22. Teach via "can it be written to a DB row?" |
-| interrupt() reruns node from top (M3) | shaky | M3 quiz Q3: saw side effect runs pre-approval, missed that it runs *twice* on resume, 2026-10-22 |
-| thread_id = date trade-offs (M3) | shaky | M3 quiz Q4: named one-entry-per-day; missed resume-after-restart + past-midnight limit, 2026-10-22 |
-| Streaming filter / worker-thread SQLite bug (M3) | not yet | M3 quiz Q5: "no idea", didn't know REPLY_NODES filter exists, 2026-10-22 |
+| Guardrails in code vs prompt rules | not yet | M2 quiz Q5: "no idea", 2026-09-28. M4's LOOKUP_REQUEST gate is a fresh example of the same lesson |
+| State vs context (M3) | shaky | M3 quiz Q1/Q2, 2026-10-22. Teach via "can it be written to a DB row?" |
+| interrupt() reruns node from top (M3) | shaky | M3 quiz Q3: missed that it runs *twice*, 2026-10-22 |
+| thread_id = date trade-offs (M3) | shaky | M3 quiz Q4, 2026-10-22 |
+| Streaming filter / worker-thread SQLite bug (M3) | not yet | M3 quiz Q5: "no idea", 2026-10-22 |
+| M4 tools / ReAct / RAG | not yet quizzed | — |
