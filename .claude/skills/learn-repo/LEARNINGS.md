@@ -133,9 +133,13 @@ uv run diary list / show / reindex (rebuild Chroma from SQLite)
 | Bounded lists / runaway generation | solid-ish | M2 quiz Q4: got max_length; missed num_predict backstop, 2026-09-28 |
 | Two-layer schema (ExtractedEntry vs JournalEntry) | shaky | M2 quiz Q1: said "mood" is code-known, 2026-09-28 |
 | Grammar doesn't pass descriptions → field_guide | shaky | M2 quiz Q3: guessed "second validation", 2026-09-28 |
-| Guardrails in code vs prompt rules | not yet | M2 quiz Q5: "no idea", 2026-09-28. M4's LOOKUP_REQUEST gate is a fresh example of the same lesson |
+| Guardrails in code vs prompt rules | solid-ish | M2 Q5 "no idea" (2026-09-28) → M4 Q2 "move logic to code" ✓, but mixed in the date-arg removal; didn't name LOOKUP_REQUEST, 2026-10-24 |
 | State vs context (M3) | shaky | M3 quiz Q1/Q2, 2026-10-22. Teach via "can it be written to a DB row?" |
 | interrupt() reruns node from top (M3) | shaky | M3 quiz Q3: missed that it runs *twice*, 2026-10-22 |
 | thread_id = date trade-offs (M3) | shaky | M3 quiz Q4, 2026-10-22 |
 | Streaming filter / worker-thread SQLite bug (M3) | not yet | M3 quiz Q5: "no idea", 2026-10-22 |
-| M4 tools / ReAct / RAG | not yet quizzed | — |
+| Tool msgs kept out of transcript (M4) | solid | M4 Q3 correct, 2026-10-24 |
+| SQLite = truth, Chroma = rebuildable index (M4) | shaky | M4 Q1: only said "id = date", missed get_entry from SQLite + reindex, 2026-10-24 |
+| No save tool = HITL via interrupt() (M4/M3) | shaky | M4 Q4: said "save node exists"; didn't connect to interrupt()/human yes, 2026-10-24 |
+| Tool errors as strings → model retries (M4) | shaky | M4 Q5: saw parse fails; missed error ToolMessage → retry with calendar_hint → MAX_TOOL_ROUNDS, 2026-10-24 |
+| Pattern across quizzes | — | Spots *what* breaks, skips *which mechanism* handles it. Ask "what code path runs next?" |
