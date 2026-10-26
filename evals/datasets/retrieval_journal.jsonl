@@ -1,0 +1,63 @@
+// Synthetic journal for the retrieval suite: 60 days, Aug-Oct 2026. Fictional person: data analyst
+// in Singapore, sister Mei (engaged), friend Jun, manager Priya, neighbour's cat Mochi.
+// Topics recur on purpose (running, pottery, Mei, work) so search has to tell similar days apart.
+{"date": "2026-08-01", "mood": 6, "summary": "You moved into your new apartment in Tiong Bahru and spent the day surrounded by boxes.", "highlights": ["moved into new apartment"], "challenges": ["unpacking chaos"], "tags": ["home"]}
+{"date": "2026-08-02", "mood": 7, "summary": "You assembled a bookshelf with Jun and ate pizza on the floor.", "highlights": ["built bookshelf with Jun"], "challenges": [], "tags": ["home", "friends"]}
+{"date": "2026-08-03", "mood": 7, "summary": "You explored the neighbourhood market and bought two plants for the balcony.", "highlights": ["bought plants at the market"], "challenges": [], "tags": ["home", "errands"]}
+{"date": "2026-08-04", "mood": 6, "summary": "Your first day as a data analyst at Halcyon Logistics; you were nervous but met the team.", "highlights": ["first day at the new job", "met the team"], "challenges": ["nerves"], "tags": ["work"]}
+{"date": "2026-08-05", "mood": 4, "summary": "Your work laptop wasn't set up and an IT ticket ate the whole day.", "highlights": [], "challenges": ["laptop setup problems"], "tags": ["work"]}
+{"date": "2026-08-07", "mood": 7, "summary": "You started learning Japanese on Duolingo with a 15-minute lesson.", "highlights": ["started learning Japanese"], "challenges": [], "tags": ["learning"]}
+{"date": "2026-08-08", "mood": 9, "summary": "At dim sum with your sister Mei, she announced she's engaged to Daniel.", "highlights": ["Mei got engaged"], "challenges": [], "tags": ["family", "food"]}
+{"date": "2026-08-10", "mood": 7, "summary": "A rainy Sunday reading Norwegian Wood in a cafe.", "highlights": ["read Murakami at a cafe"], "challenges": [], "tags": ["rest", "books"]}
+{"date": "2026-08-11", "mood": 4, "summary": "Your dental checkup found a cavity and you had it filled.", "highlights": [], "challenges": ["cavity filling"], "tags": ["health", "errands"]}
+{"date": "2026-08-13", "mood": 7, "summary": "Your manager Priya took the new team out to lunch to welcome you.", "highlights": ["welcome lunch with the team"], "challenges": [], "tags": ["work"]}
+{"date": "2026-08-15", "mood": 6, "summary": "You ran 5k at East Coast Park, your first run in months, and it felt slow.", "highlights": ["first run in months"], "challenges": ["slow pace"], "tags": ["running", "health"]}
+{"date": "2026-08-17", "mood": 8, "summary": "You cooked laksa for your mom's birthday dinner and she loved it.", "highlights": ["cooked laksa for mom's birthday"], "challenges": [], "tags": ["family", "food"]}
+{"date": "2026-08-18", "mood": 3, "summary": "You were hungover and did nothing all day.", "highlights": [], "challenges": ["hangover"], "tags": ["rest"]}
+{"date": "2026-08-20", "mood": 8, "summary": "You presented your first dashboard and Priya said it was exactly what she needed.", "highlights": ["dashboard praised by Priya"], "challenges": [], "tags": ["work"]}
+{"date": "2026-08-22", "mood": 3, "summary": "The air conditioning broke and you argued with your landlord about fixing it.", "highlights": [], "challenges": ["broken aircon", "argument with landlord"], "tags": ["home", "stress"]}
+{"date": "2026-08-23", "mood": 7, "summary": "A technician repaired the aircon and you finally slept well.", "highlights": ["aircon repaired"], "challenges": [], "tags": ["home"]}
+{"date": "2026-08-25", "mood": 7, "summary": "You ran 7k and felt stronger than last week.", "highlights": ["7k run"], "challenges": [], "tags": ["running"]}
+{"date": "2026-08-27", "mood": 7, "summary": "You hit a 20-day streak on your Japanese lessons.", "highlights": ["20-day Japanese streak"], "challenges": [], "tags": ["learning"]}
+{"date": "2026-08-29", "mood": 10, "summary": "You saw Coldplay at the National Stadium with Jun and sang along to everything.", "highlights": ["Coldplay concert with Jun"], "challenges": [], "tags": ["friends", "music"]}
+{"date": "2026-08-31", "mood": 3, "summary": "You lost your wallet on the MRT and spent the evening cancelling cards.", "highlights": [], "challenges": ["lost wallet", "cancelling cards"], "tags": ["errands", "stress"]}
+{"date": "2026-09-01", "mood": 8, "summary": "A stranger handed your wallet in to lost and found, with everything still inside.", "highlights": ["wallet returned"], "challenges": [], "tags": ["errands"]}
+{"date": "2026-09-02", "mood": 6, "summary": "You had your first therapy session and talked about work stress and sleep.", "highlights": ["first therapy session"], "challenges": [], "tags": ["health"]}
+{"date": "2026-09-03", "mood": 5, "summary": "A three-hour Q3 budget meeting dragged on.", "highlights": [], "challenges": ["long budget meeting"], "tags": ["work"]}
+{"date": "2026-09-05", "mood": 8, "summary": "You did the MacRitchie treetop walk with Mei and Daniel.", "highlights": ["treetop walk with Mei and Daniel"], "challenges": [], "tags": ["family", "outdoors"]}
+{"date": "2026-09-06", "mood": 2, "summary": "You got food poisoning from some chicken rice and were sick all night.", "highlights": [], "challenges": ["food poisoning"], "tags": ["health"]}
+{"date": "2026-09-07", "mood": 4, "summary": "You stayed in bed recovering from the stomach bug.", "highlights": [], "challenges": ["still recovering"], "tags": ["health", "rest"]}
+{"date": "2026-09-09", "mood": 7, "summary": "You signed up for a beginner pottery course.", "highlights": ["signed up for pottery"], "challenges": [], "tags": ["hobby"]}
+{"date": "2026-09-10", "mood": 7, "summary": "At your first pottery class you made a wonky cup.", "highlights": ["made a cup at pottery"], "challenges": [], "tags": ["hobby"]}
+{"date": "2026-09-12", "mood": 8, "summary": "You looked after the neighbour's cat Mochi for the weekend.", "highlights": ["cat-sitting Mochi"], "challenges": [], "tags": ["pets"]}
+{"date": "2026-09-14", "mood": 9, "summary": "You ran 10k for the first time ever.", "highlights": ["first ever 10k"], "challenges": [], "tags": ["running"]}
+{"date": "2026-09-15", "mood": 4, "summary": "Your knee hurt after yesterday's 10k.", "highlights": [], "challenges": ["knee pain"], "tags": ["running", "health"]}
+{"date": "2026-09-16", "mood": 5, "summary": "A physio looked at your knee and gave you exercises.", "highlights": [], "challenges": ["physio for knee"], "tags": ["health"]}
+{"date": "2026-09-18", "mood": 7, "summary": "Work offsite at Sentosa with team-building games on the beach.", "highlights": ["team offsite at Sentosa"], "challenges": [], "tags": ["work", "outdoors"]}
+{"date": "2026-09-19", "mood": 4, "summary": "A code review said your SQL queries are too slow.", "highlights": [], "challenges": ["criticism in code review"], "tags": ["work"]}
+{"date": "2026-09-21", "mood": 8, "summary": "You took the bus to Malacca to visit your grandma.", "highlights": ["visited grandma in Malacca"], "challenges": [], "tags": ["family", "travel"]}
+{"date": "2026-09-22", "mood": 5, "summary": "You came back from Malacca, tired from the long bus ride.", "highlights": [], "challenges": ["long bus ride"], "tags": ["travel"]}
+{"date": "2026-09-24", "mood": 7, "summary": "You glazed the cup from pottery class.", "highlights": ["glazed the cup"], "challenges": [], "tags": ["hobby"]}
+{"date": "2026-09-25", "mood": 9, "summary": "You booked flights to Tokyo for December.", "highlights": ["booked Tokyo flights"], "challenges": [], "tags": ["travel"]}
+{"date": "2026-09-27", "mood": 8, "summary": "Karaoke for Jun's birthday.", "highlights": ["Jun's birthday karaoke"], "challenges": [], "tags": ["friends"]}
+{"date": "2026-09-28", "mood": 3, "summary": "It was the anniversary of your dad's passing and you missed him a lot.", "highlights": [], "challenges": ["missing dad"], "tags": ["family", "grief"]}
+{"date": "2026-09-30", "mood": 7, "summary": "You finished the monthly report two days early.", "highlights": ["report finished early"], "challenges": [], "tags": ["work"]}
+{"date": "2026-10-01", "mood": 8, "summary": "You passed your first JLPT N5 practice test.", "highlights": ["passed JLPT N5 practice test"], "challenges": [], "tags": ["learning"]}
+{"date": "2026-10-02", "mood": 4, "summary": "Rain ruined the picnic you had planned.", "highlights": [], "challenges": ["picnic cancelled by rain"], "tags": ["weather"]}
+{"date": "2026-10-03", "mood": 8, "summary": "You watched Dune Part Two at the cinema with Jun.", "highlights": ["Dune at the cinema"], "challenges": [], "tags": ["friends", "movies"]}
+{"date": "2026-10-04", "mood": 9, "summary": "You gave a speech at Mei and Daniel's engagement party.", "highlights": ["speech at Mei's engagement party"], "challenges": [], "tags": ["family"]}
+{"date": "2026-10-05", "mood": 7, "summary": "You deep-cleaned the apartment and donated a bag of old clothes.", "highlights": ["donated old clothes"], "challenges": [], "tags": ["home"]}
+{"date": "2026-10-06", "mood": 4, "summary": "Priya said a promotion isn't possible this quarter, maybe next.", "highlights": [], "challenges": ["no promotion yet"], "tags": ["work", "stress"]}
+{"date": "2026-10-08", "mood": 7, "summary": "You started reading Project Hail Mary.", "highlights": ["started a new book"], "challenges": [], "tags": ["books"]}
+{"date": "2026-10-09", "mood": 2, "summary": "You couldn't sleep and got about three hours.", "highlights": [], "challenges": ["insomnia"], "tags": ["health"]}
+{"date": "2026-10-10", "mood": 8, "summary": "You volunteered at a food bank, packing groceries for families.", "highlights": ["volunteering at the food bank"], "challenges": [], "tags": ["community"]}
+{"date": "2026-10-11", "mood": 9, "summary": "You ran a 12k long run and your knee felt fine.", "highlights": ["12k long run"], "challenges": [], "tags": ["running"]}
+{"date": "2026-10-12", "mood": 8, "summary": "You made a bowl at pottery, your best piece yet.", "highlights": ["made a bowl"], "challenges": [], "tags": ["hobby"]}
+{"date": "2026-10-13", "mood": 3, "summary": "The data pipeline went down at work and you stayed late fixing it.", "highlights": [], "challenges": ["pipeline outage", "stayed late"], "tags": ["work", "stress"]}
+{"date": "2026-10-14", "mood": 8, "summary": "Mochi the cat stayed with you again for the weekend.", "highlights": ["Mochi visit"], "challenges": [], "tags": ["pets"]}
+{"date": "2026-10-15", "mood": 4, "summary": "You caught a cold and worked from home.", "highlights": [], "challenges": ["cold"], "tags": ["health", "work"]}
+{"date": "2026-10-16", "mood": 8, "summary": "You had a video call with old university friends in London.", "highlights": ["call with uni friends"], "challenges": [], "tags": ["friends"]}
+{"date": "2026-10-17", "mood": 7, "summary": "You bought new running shoes.", "highlights": ["new running shoes"], "challenges": [], "tags": ["running", "shopping"]}
+{"date": "2026-10-18", "mood": 8, "summary": "You cooked a new curry recipe for Jun and his girlfriend Aisha.", "highlights": ["curry dinner for Jun and Aisha"], "challenges": [], "tags": ["food", "friends"]}
+{"date": "2026-10-19", "mood": 4, "summary": "You and Mei had a tense argument about her wedding planning stress.", "highlights": [], "challenges": ["argument with Mei"], "tags": ["family"]}
+{"date": "2026-10-20", "mood": 8, "summary": "You and Mei made up over coffee.", "highlights": ["made up with Mei"], "challenges": [], "tags": ["family"]}

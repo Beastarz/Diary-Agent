@@ -1,0 +1,48 @@
+// Labelled with the CORRECT intent, not what the router does today: known misses are meant to fail.
+// route: chat | checkin | extract | summarize | done.  tools (chat route only): none | read | all
+// "known" marks a case added for a failure already seen in NOTES.md.
+{"id": "cmd_save", "text": "/save", "route": "extract"}
+{"id": "cmd_save_caps", "text": "/SAVE", "route": "extract"}
+{"id": "cmd_save_spaces", "text": "  /save  ", "route": "extract"}
+{"id": "cmd_summary", "text": "/summary", "route": "summarize"}
+{"id": "cmd_cancel", "text": "/cancel", "route": "done"}
+{"id": "cmd_checkin", "text": "/checkin", "route": "checkin"}
+{"id": "checkin_phrase", "text": "check in", "route": "checkin"}
+{"id": "checkin_lets", "text": "Let's do a check-in", "route": "checkin"}
+{"id": "checkin_question", "text": "can we do a checkin?", "route": "checkin"}
+{"id": "checkin_about_day", "text": "I want to check in about my day", "route": "checkin"}
+{"id": "checkin_hotel", "text": "I had to check in at the hotel", "route": "chat", "tools": "none", "known": "M3"}
+{"id": "checkin_airport", "text": "Check-in at the airport took forever", "route": "chat", "tools": "none"}
+{"id": "checkin_manager", "text": "My manager wants to check in with me tomorrow", "route": "chat", "tools": "none"}
+{"id": "save_words", "text": "save this entry please", "route": "extract"}
+{"id": "save_done_for_today", "text": "I'm done for today, save it", "route": "extract"}
+{"id": "summary_words", "text": "Can you summarise my week?", "route": "summarize"}
+{"id": "chat_statement", "text": "Had a long day at work", "route": "chat", "tools": "none"}
+{"id": "chat_thanks", "text": "thanks", "route": "chat", "tools": "none"}
+{"id": "chat_feeling", "text": "I'm feeling anxious tonight", "route": "chat", "tools": "none"}
+{"id": "chat_how_are_you", "text": "How are you?", "route": "chat", "tools": "none"}
+{"id": "chat_rhetorical", "text": "Isn't it weird how tired I am?", "route": "chat", "tools": "none"}
+{"id": "chat_cooking", "text": "What should I cook tonight?", "route": "chat", "tools": "none"}
+{"id": "chat_remember_fondly", "text": "I remember the beach trip fondly", "route": "chat", "tools": "none"}
+{"id": "lookup_yesterday", "text": "What did I do yesterday?", "route": "chat", "tools": "read"}
+{"id": "lookup_no_question_mark", "text": "when did I last see my sister", "route": "chat", "tools": "read", "known": "M4"}
+{"id": "lookup_tell", "text": "tell me about last week", "route": "chat", "tools": "read"}
+{"id": "lookup_show", "text": "Show me my entries from Monday", "route": "chat", "tools": "read"}
+{"id": "lookup_remind", "text": "remind me what I wrote about my knee", "route": "chat", "tools": "read"}
+{"id": "lookup_list", "text": "list my moods this month", "route": "chat", "tools": "read"}
+{"id": "lookup_find", "text": "find the day I went hiking", "route": "chat", "tools": "read"}
+{"id": "lookup_remember_when", "text": "Remember when I ran the 10k?", "route": "chat", "tools": "read"}
+{"id": "lookup_i_wonder", "text": "I wonder how my mood was last month", "route": "chat", "tools": "read"}
+{"id": "memory_remember_that", "text": "Remember that my sister's name is Mei", "route": "chat", "tools": "all"}
+{"id": "memory_please", "text": "please remember I'm allergic to peanuts", "route": "chat", "tools": "all"}
+{"id": "memory_dont_forget", "text": "Don't forget I'm training for a half marathon", "route": "chat", "tools": "all"}
+{"id": "memory_keep_in_mind", "text": "Keep in mind I work night shifts", "route": "chat", "tools": "all"}
+{"id": "memory_mid_sentence", "text": "Oh and remember that I moved to Tiong Bahru", "route": "chat", "tools": "all"}
+{"id": "in_checkin_answer", "text": "Pretty tired but okay", "mode": "checkin", "step": 1, "route": "checkin"}
+{"id": "in_checkin_best_part", "text": "The best part was lunch with Mei", "mode": "checkin", "step": 2, "route": "checkin"}
+{"id": "in_checkin_last_answer", "text": "I'm grateful for my team", "mode": "checkin", "step": 4, "route": "extract"}
+{"id": "in_checkin_cmd_cancel", "text": "/cancel", "mode": "checkin", "step": 2, "route": "done"}
+{"id": "in_checkin_cmd_save", "text": "/save", "mode": "checkin", "step": 2, "route": "extract"}
+{"id": "in_checkin_cancel_words", "text": "cancel the check-in", "mode": "checkin", "step": 1, "route": "done"}
+{"id": "in_checkin_stop", "text": "actually let's stop here", "mode": "checkin", "step": 1, "route": "done"}
+{"id": "in_checkin_says_checkin", "text": "this check in is nice", "mode": "checkin", "step": 2, "route": "checkin"}

@@ -1,0 +1,32 @@
+// Questions for retrieval_journal.jsonl. gold = days that answer it (any one counts); [] = never happened.
+// Many are paraphrased on purpose (grandmother/grandma, Japan/Tokyo, father/dad, sick/food poisoning).
+{"id": "new_job", "q": "When did I start my new job?", "gold": ["2026-08-04"]}
+{"id": "sister_engaged", "q": "When did my sister get engaged?", "gold": ["2026-08-08"]}
+{"id": "lost_wallet", "q": "When did I lose my wallet?", "gold": ["2026-08-31"]}
+{"id": "returned_item", "q": "Did someone give back something I lost?", "gold": ["2026-09-01"]}
+{"id": "first_10k", "q": "When did I first run 10 kilometres?", "gold": ["2026-09-14"]}
+{"id": "knee", "q": "When did my knee start hurting?", "gold": ["2026-09-15", "2026-09-16"]}
+{"id": "first_pottery", "q": "What did I make at my first pottery class?", "gold": ["2026-09-10"]}
+{"id": "food_sick", "q": "When was I sick from something I ate?", "gold": ["2026-09-06", "2026-09-07"]}
+{"id": "concert", "q": "When did I see Coldplay?", "gold": ["2026-08-29"]}
+{"id": "grandmother", "q": "When did I visit my grandmother?", "gold": ["2026-09-21", "2026-09-22"]}
+{"id": "japan_trip", "q": "When did I book my holiday to Japan?", "gold": ["2026-09-25"]}
+{"id": "father", "q": "When was I sad about my father?", "gold": ["2026-09-28"]}
+{"id": "speech", "q": "When did I give a speech?", "gold": ["2026-10-04"]}
+{"id": "therapy", "q": "Have I talked to a professional about my mental health?", "gold": ["2026-09-02"]}
+{"id": "aircon", "q": "When did the air conditioner break?", "gold": ["2026-08-22", "2026-08-23"]}
+{"id": "cat", "q": "When did I look after the neighbour's cat?", "gold": ["2026-09-12", "2026-10-14"]}
+{"id": "sleep", "q": "When did I have trouble sleeping?", "gold": ["2026-10-09"]}
+{"id": "volunteer", "q": "When did I help out in the community?", "gold": ["2026-10-10"]}
+{"id": "outage", "q": "When did the work systems go down?", "gold": ["2026-10-13"]}
+{"id": "mei_fight", "q": "When did I argue with Mei?", "gold": ["2026-10-19"]}
+{"id": "movie", "q": "When did I last watch a film?", "gold": ["2026-10-03"]}
+{"id": "promotion", "q": "What happened with my promotion?", "gold": ["2026-10-06"]}
+{"id": "jlpt", "q": "When did I do my Japanese practice exam?", "gold": ["2026-10-01"]}
+{"id": "move", "q": "When did I move house?", "gold": ["2026-08-01"]}
+{"id": "criticism", "q": "When did I get criticised at work?", "gold": ["2026-09-19"]}
+{"id": "none_skiing", "q": "When did I go skiing?", "gold": []}
+{"id": "none_wedding", "q": "When did I go to a wedding?", "gold": []}
+{"id": "none_arm", "q": "When did I break my arm?", "gold": []}
+{"id": "none_dog", "q": "When did I adopt a dog?", "gold": []}
+{"id": "none_diving", "q": "When did I go scuba diving?", "gold": []}

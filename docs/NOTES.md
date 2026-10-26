@@ -76,7 +76,7 @@ Lessons:
 6. **100% means the eval is too easy, not that the model is perfect.** The probe still misses things: "8 out of 10" listed as a *highlight*, and a `work` tag on a dentist trip. M7 needs harder cases and checks on tags and highlights.
 
 ### Try this
-- `uv run python evals/extract_probe.py --model <other model>`: how does it compare?
+- `DIARY_CHAT_MODEL=<other model> uv run python evals/run_evals.py --only extraction`: how does it compare? (`extract_probe.py` was folded into the M7 harness.)
 - Remove `max_length` from `tags` and rerun `gratitude_only` (be ready to Ctrl+C).
 - Write a case you think will fail, e.g. sarcasm: "Oh *great*, another Monday." Does the mood come out right?
 - `uv run diary show --transcript` to see what was stored alongside the entry.
@@ -244,3 +244,36 @@ Final: extraction recall 5/6 with **0 memories kept that shouldn't be** (mood, p
 - Remove the `THIRD_PERSON` guardrail and rerun `--part extract`: watch the sister's move become yours.
 - In `diary chat`: "Remember that I'm training for a marathon", say yes, then tomorrow ask "what are my goals?". Check `diary memory list`.
 - Change `MEMORY_REQUEST` back to `\bremember\b` and run `--part tool`.
+
+## M7 (steps 0–3): an eval harness, and what it found
+- **Where to look:** `evals/run_evals.py`, `evals/evaluators.py`, `evals/suites/`, `evals/datasets/*.jsonl`, `evals/tests/`
+- **One command:** `uv run python evals/run_evals.py [--only routing,retrieval,extraction] [--runs 2]`. It prints a scorecard with the change vs the previous run of each suite, and saves `evals/results/evals-<time>.json` with model, prompt version and commit (`+dirty` if uncommitted). The loop: run, change one thing, run again, keep it only if the numbers say so.
+- **Cheapest first.** Routing needs no model (instant), retrieval only embeddings (seconds), extraction the chat model (~1 min for 25 cases × 2). A full run takes about 2 minutes.
+- **Data, not code.** Cases live in JSONL, labelled with the *correct* answer, not today's behaviour, so known misses show up as failures. Mixed authoring: hand-written for the tricky and known-failure cases, AI-drafted for the bulk. **Review the labels**: they're the ground truth for every score.
+- **Test the checker.** `evaluators.py` is pure code with unit tests, and `test_datasets.py` catches label typos (an unknown route, a gold date that isn't in the journal). Both run in CI. M4 and M5 each had "failures" that were the checker's fault; this is the fix.
+- **Only score what a case is about.** An extraction case defines just the checks it was written for (`mood`, `placement`, `forbidden`, ...), so one case doesn't fail for unrelated reasons.
+
+### Baseline (llama3.1:8b, prompt v1.10)
+| Suite | Headline | What failed |
+|---|---|---|
+| Routing (45 messages) | route 82%, tool gate 62% | "check in at the hotel/airport/with my manager" start a check-in; "save it" / "summarise my week" / "cancel the check-in" in plain words aren't understood; any "?" offers tools ("How are you?"); no "?" means no tools ("when did I last see my sister") |
+| Retrieval (60 entries, 30 questions) | recall@1 96%, recall@4 100%, MRR 0.97 | ranking is fine. The **cutoff has no margin**: furthest correct answer 0.41, closest never-happened match 0.41. "When did I go to a wedding?" kept the engagement party and the wedding-planning argument |
+| Extraction (25 transcripts × 2) | all checks 74%, valid 100%, mood 98% | `not_in` 50% and `forbidden` 50% are the weak spots (below) |
+
+Extraction failures, all identical across both runs (temperature 0):
+- **Past-day leak (confirmed).** The assistant said "Last Saturday you ran a 10k", and extraction put "ran a 10k" and "set a personal best" in *today's* highlights. M4 flagged this as a risk; now it's measured.
+- **Assistant's words become yours:** "you might be feeling burnt out?" → challenge "Burnt out".
+- **"8 out of 10" as a highlight** (M2's note), and **a `work` tag on a dentist + groceries day**.
+- **Plans as events:** "looking forward to a nice sleep" → highlight "nice sleep". Same error as a real entry (Oct 19).
+- **Possibly label issues, for review:** grief day with highlights ("looking at old photos"), and mood 1 for a twisted ankle (label said 2–5). Arguable either way; decide before "fixing" the model to match.
+
+### Lessons
+- **A scorecard turns "known limits" into a to-do list with numbers.** Every row above was a sentence in NOTES before; now each has a rate that a fix has to move.
+- **Ranking and cutoff are separate problems.** Search finds the right day every time; deciding when *nothing* matches is the hard part, and a threshold tuned on 10 entries doesn't hold at 60.
+- **Same output twice isn't proof of stability.** Temperature 0 gave identical runs here; a prompt change can still shift everything. Keep `--runs 2`.
+- **The dataset is the product.** 25 cases is still tiny; one label changes a rate by 2–4 points.
+
+### Try this
+- `uv run python evals/run_evals.py --only routing`, then add a `"\bcheck in at\b"` exception to `CHECKIN_PHRASE` and rerun: watch the score move.
+- Set `MAX_DISTANCE = 0.40` and run `--only retrieval`: what do you gain and lose?
+- Add your own tricky transcript to `datasets/extraction.jsonl` and run `--only extraction`.

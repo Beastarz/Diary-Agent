@@ -39,7 +39,7 @@ uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat
 uv run diary reindex               # rebuild the search index from saved entries
 uv run diary summary [--week|--month] [--date YYYY-MM-DD]   # map-reduce review; --saved shows the stored one
 uv run diary memory list            # what the agent remembers about you (also: add "...", forget <id>)
-uv run python evals/extract_probe.py   # mini eval of entry extraction (needs Ollama)
+uv run python evals/run_evals.py       # M7 scorecard: routing, retrieval, extraction (--only a,b; needs Ollama)
 uv run python evals/tool_probe.py      # tool-use eval; --models a b to compare (needs Ollama)
 uv run python evals/summary_probe.py   # summary grounding probe; --collapse forces the merge step (needs Ollama)
 uv run pytest                      # unit tests (no Ollama needed)

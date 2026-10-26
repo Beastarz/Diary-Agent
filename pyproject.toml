@@ -22,4 +22,5 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "evals/tests"]
+pythonpath = ["evals"]  # so evals/tests can import evaluators and suites, as run_evals.py does

@@ -15,7 +15,7 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M4 Tools / ReAct agent | ✅ done |
 | M5 Summaries | ✅ done |
 | M6 Long-term memory | ✅ done |
-| M7 Evals | ⏭ next |
+| M7 Evals | 🔨 steps 0–3 done (harness, routing, retrieval, extraction); 4–7 next |
 | M8 | todo |
 
 Change log:
@@ -76,11 +76,15 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
       services/  services/agent/  repositories/   ✓
   frontend/                      placeholder for a future web UI
   evals/                         needs Ollama; measures model quality
-    extract_probe.py             ✓ M2 mini eval (7 cases)
+    run_evals.py                 ✓ M7 harness: scorecard + deltas vs last run, results JSON
+    evaluators.py                ✓ pure scoring functions (unit-tested in evals/tests/)
+    suites/                      ✓ routing, retrieval, extraction (extraction replaced M2's extract_probe.py)
+    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 questions, extraction 25
+    tests/                       ✓ checker + dataset-sanity tests, run by pytest/CI (no Ollama)
     tool_probe.py                ✓ M4 tool-use eval (14 cases, --models to compare, retrieval check)
     summary_probe.py             ✓ M5 summary probe (3 cases, --collapse forces the merge step)
     memory_probe.py              ✓ M6 memory probe (extraction, similarity calibration, tool choice)
-    datasets/*.jsonl  evaluators.py  run_evals.py   M7
+    suites/ for steps 4-7        M7: tool trajectories, language, LLM judge, simulated user
   scripts/
     smoke.py                     ✓ Ollama connectivity check
   docs/
@@ -121,6 +125,13 @@ Each milestone ends runnable. Append a docs/NOTES.md section (concepts, what to 
 6. **Multi-turn simulation:** a simulated-user LLM with a persona runs a full check-in; judge whether a complete, accurate entry was saved.
 7. **Language-consistency eval:** formalize the M1 CJK-leak probe.
 Results are saved as JSON with prompt version + model name, so runs can be compared (e.g. llama3.1:8b vs another model, prompt v1 vs v2). NOTES should cover eval pitfalls: judge bias, small datasets, and nondeterminism (run N times).
+
+*Build order (decided 2026-10-26):* cheapest and most informative first. Test cases are **mixed**: hand-written for the tricky and known-failure cases, AI-drafted for the bulk, reviewed by the user. The existing probes fold into the harness step by step.
+- **Step 0 — harness.** `run_evals.py --only <suite> --runs N`; datasets in `evals/datasets/*.jsonl`; pure scoring in `evaluators.py` (unit-tested); one results JSON per run (model, prompt version, commit) and a scorecard with deltas vs the previous run.
+- **Step 1 — routing** (no LLM). Labelled messages → router route + which tools the code gate offers. Accuracy + confusion matrix.
+- **Step 2 — retrieval** (embeddings only). ~60 synthetic entries + questions with known answer days → recall@1, recall@k, MRR, and whether "nothing found" questions are rejected by `MAX_DISTANCE`.
+- **Step 3 — extraction** (the most important one now that summaries read the fields directly). ~25 transcripts with gold labels, including the known failures. Replaces `extract_probe.py`.
+- **Steps 4–7 — later:** tool trajectories (fold in `tool_probe`), language check, LLM judge (decide the judge model then, and calibrate it against hand grades first), simulated user.
 
 **M8 (optional polish).** Export entries to Markdown, `diary list`, safety guardrail node, local tracing viewer.
 
