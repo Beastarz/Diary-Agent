@@ -273,7 +273,23 @@ Extraction failures, all identical across both runs (temperature 0):
 - **Same output twice isn't proof of stability.** Temperature 0 gave identical runs here; a prompt change can still shift everything. Keep `--runs 2`.
 - **The dataset is the product.** 25 cases is still tiny; one label changes a rate by 2–4 points.
 
+### First fix through the loop: the past-day leak
+1. **Prompt rule first** (cheapest): "the entry is about TODAY only". The leak case passed, all-checks went 74% → 70%, and it looked like the rule made the model drop real events (the sushi dinner, "called my mom").
+2. **That reading was wrong.** With the prompt back at v1.10, the same events still dropped. Results repeat exactly *within* a session but shifted *between* sessions with an identical prompt. So one run per variant can't separate a change from noise.
+3. **Fair A/B:** each variant twice × 3 runs, back to back.
+   - **A, code fix only:** 72% both times.
+   - **B, code fix + prompt rule:** 71% both times. The rule fixed the no-tool leak case, but pulled the assistant's word back into the summary ("enjoyed the *invigorating* feeling") and moved the injury mood to 1.
+4. **Kept: the code fix.** `format_transcript()` drops the assistant's answer after a tool result, until the user speaks again. The code *knows* which replies came from a lookup; a prompt can only ask the model to guess. The eval case now uses real chat messages (`"messages"`: user / tool_call / tool / assistant) and goes through `format_transcript()` like a real save.
+
+Known limit ([#9](https://github.com/Beastarz/Diary-Agent/issues/9)): `past_day_recall_no_tool`. The assistant recalls a past day without a lookup (e.g. from an M6 memory: "after the 10k you ran last Saturday!"). Mentioning it is fine, but extraction still records "ran 10k" as *today's* highlight, 3/3. No code signal marks those replies yet. A proposed guardrail (drop events only the assistant said) is in the issue.
+
+**Lessons:**
+- **Compare variants in the same session, with repeats.** Comparing against a baseline from an earlier session mixed noise into the result and almost got the wrong cause recorded.
+- **A prompt rule is a trade, not a fix.** It moved failures around (one case fixed, two broken). The scorecard showed the net, which a single example never would.
+- **Prefer what the code already knows.** Third time in this project (M4 tool gate, M5 trend, M7 leak).
+
 ### Try this
+- Run `uv run python evals/run_evals.py --only extraction --runs 3` twice in a row, then once after `ollama stop llama3.1:8b`: do the numbers move between sessions?
 - `uv run python evals/run_evals.py --only routing`, then add a `"\bcheck in at\b"` exception to `CHECKIN_PHRASE` and rerun: watch the score move.
 - Set `MAX_DISTANCE = 0.40` and run `--only retrieval`: what do you gain and lose?
 - Add your own tricky transcript to `datasets/extraction.jsonl` and run `--only extraction`.

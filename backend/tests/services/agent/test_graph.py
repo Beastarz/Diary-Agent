@@ -207,7 +207,8 @@ def test_saved_transcript_leaves_out_tool_traffic(graph, ctx, chat_model_cls):
     say(graph, ctx, "/save")
     graph.invoke(Command(resume=True), CONFIG, context=ctx)
     transcript = entry_repo.get_entry(ctx.conn, DAY).transcript
-    assert transcript == "User: What did I do last Wednesday?\nAssistant: You saw your sister."
+    # The answer retells a past day, so it's left out too (evals: past_day_leak).
+    assert transcript == "User: What did I do last Wednesday?"
 
 
 def test_save_indexes_the_entry_for_search(graph, ctx):

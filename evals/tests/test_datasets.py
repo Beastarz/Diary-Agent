@@ -6,7 +6,7 @@ from datetime import date
 from suites import load_jsonl
 
 ROUTES = {"chat", "checkin", "extract", "summarize", "done"}
-EXTRACTION_KEYS = {"id", "transcript", "mood", "null_ok", "mentions", "placement", "not_in", "empty", "forbidden",
+EXTRACTION_KEYS = {"id", "transcript", "messages", "mood", "null_ok", "mentions", "placement", "not_in", "empty", "forbidden",
                    "tags_any", "tags_not", "mood_words_any"}
 LIST_FIELDS = {"highlights", "challenges", "gratitude", "mood_words", "tags"}
 
@@ -38,11 +38,22 @@ def test_extraction_cases_use_known_keys_and_fields():
     assert unique_ids(rows)
     for r in rows:
         assert set(r) <= EXTRACTION_KEYS, f"{r['id']}: unknown keys {set(r) - EXTRACTION_KEYS}"
+        assert ("transcript" in r) != ("messages" in r), f"{r['id']}: give a transcript or messages, not both"
+        assert all(t["role"] in {"user", "assistant", "tool_call", "tool"} for t in r.get("messages", [])), r["id"]
         lo, hi = r["mood"]
         assert 1 <= lo <= hi <= 10, r["id"]
         for key in ("placement", "not_in"):
             assert set(r.get(key, {})) <= LIST_FIELDS, r["id"]
         assert set(r.get("empty", [])) <= LIST_FIELDS, r["id"]
+
+
+def test_message_cases_go_through_format_transcript():
+    from suites.extraction import to_transcript
+
+    case = next(r for r in load_jsonl("extraction.jsonl") if r["id"] == "past_day_leak")
+    transcript = to_transcript(case)
+    assert "10k" not in transcript  # the lookup and its answer are dropped
+    assert transcript.endswith("made pasta.")
 
 
 def test_routing_suite_runs_without_a_model():

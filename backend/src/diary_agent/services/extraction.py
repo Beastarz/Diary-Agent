@@ -55,10 +55,25 @@ def field_guide(schema: type[BaseModel] = ExtractedEntry) -> str:
 
 
 def format_transcript(history: list[BaseMessage]) -> str:
-    """Only what was *said*. Tool results are past entries, and tool-call messages are usually
-    empty, so both are left out; otherwise old days would leak into today's entry."""
+    """Only what was *said* about today. Left out, so old days don't leak into today's entry:
+    - tool results (they're past entries) and tool-call messages (usually empty)
+    - the assistant's answer after a tool result, until the user speaks again. It retells past
+      days ("Last Saturday you ran a 10k"), and extraction copied those into today's highlights
+      every time (evals: past_day_leak). A "today only" prompt rule was tried instead: it fixed the
+      leak but pulled the assistant's words back in ("enjoyed the invigorating feeling"), so it
+      scored no better (71% vs 72% all-checks, 2 x 3 runs each). The code knows which replies
+      came from a lookup; the model has to guess.
+    """
     speaker = {"human": "User", "ai": "Assistant"}
-    return "\n".join(f"{speaker[m.type]}: {m.content}" for m in history if m.type in speaker and m.content)
+    lines, after_lookup = [], False
+    for m in history:
+        if m.type == "human":
+            after_lookup = False
+        elif m.type == "tool":
+            after_lookup = True
+        if m.type in speaker and m.content and not (m.type == "ai" and after_lookup):
+            lines.append(f"{speaker[m.type]}: {m.content}")
+    return "\n".join(lines)
 
 
 def extract_entry(extractor: Runnable, transcript: str, max_retries: int = 2) -> ExtractedEntry:

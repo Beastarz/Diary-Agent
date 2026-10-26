@@ -1,7 +1,7 @@
 """Retry logic tested with a fake extractor (a RunnableLambda), so no LLM is needed."""
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 
 from diary_agent.models.entry import ExtractedEntry
@@ -58,3 +58,18 @@ def test_guardrail_keeps_only_users_mood_words():
 def test_format_transcript():
     text = format_transcript([HumanMessage("hi"), AIMessage("hello")])
     assert text == "User: hi\nAssistant: hello"
+
+
+def test_format_transcript_drops_lookup_answers_until_the_user_speaks():
+    call = {"name": "get_entries_by_date", "args": {"start_date": "2026-10-17"}, "id": "c1"}
+    history = [
+        HumanMessage("What did I do last Saturday?"),
+        AIMessage("", tool_calls=[call]),
+        ToolMessage("2026-10-17: ran a 10k", tool_call_id="c1"),
+        AIMessage("Last Saturday you ran a 10k!"),
+        HumanMessage("Oh right. Today I made pasta."),
+        AIMessage("Sounds cosy."),
+    ]
+    assert format_transcript(history) == (
+        "User: What did I do last Saturday?\nUser: Oh right. Today I made pasta.\nAssistant: Sounds cosy."
+    )
