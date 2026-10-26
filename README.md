@@ -56,4 +56,4 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 - [x] M6 Long-term memory about you (store, `remember that…`, `diary memory`)
 - [ ] M7 Evals: component, retrieval, trajectory, LLM-as-judge, simulated users
 
-See [`docs/PLAN.md`](docs/PLAN.md) for the full design and [`docs/NOTES.md`](docs/NOTES.md) for what each milestone teaches.
+See [`docs/PLAN.md`](docs/PLAN.md) for the full design and [`docs/NOTES.md`](docs/NOTES.md) for what each milestone teaches. To learn the concepts by topic (LangGraph, tools, RAG, memory, evals, …), start at [`docs/learning/`](docs/learning/README.md).
