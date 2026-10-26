@@ -1,6 +1,6 @@
 """System prompts. Bump PROMPT_VERSION whenever you change a prompt so eval runs stay comparable."""
 
-PROMPT_VERSION = "v1.9"
+PROMPT_VERSION = "v1.10"
 # v1.1: language-consistency rule (qwen3 leaked Chinese tokens)
 # v1.2: added EXTRACT_SYSTEM
 # v1.3: field guide injected into extraction prompt, fields reordered, softer mood rule
@@ -10,6 +10,7 @@ PROMPT_VERSION = "v1.9"
 # v1.7: date cheat-sheet in TOOLS_SYSTEM, stricter when-to-call rule (from evals/tool_probe.py)
 # v1.8: added CONDENSE_SYSTEM, COLLAPSE_SYSTEM, REDUCE_SYSTEM (M5 summaries)
 # v1.9: added MEMORY_SYSTEM, EXTRACT_MEMORY_SYSTEM; remember_fact rule in TOOLS_SYSTEM (M6 memory)
+# v1.10: removed CONDENSE_SYSTEM; summaries build each day's line in code (summary.day_line)
 
 COMPANION_SYSTEM = """You are a warm, thoughtful journaling companion. Today is {today}.
 
@@ -48,15 +49,6 @@ Rules:
 - Keep list items short (a few words each).
 - Write in the same language as the user."""
 
-# M5 map step: one entry -> a short digest. Runs once per entry, so it stays small.
-CONDENSE_SYSTEM = """You condense one diary entry into a short digest for a {period} review.
-
-Rules:
-- At most 3 sentences in second person ("You ..."). One is fine for a short entry.
-- Keep concrete events, people, feelings, wins and problems. Drop small talk.
-- Keep the user's wording. Do not add conclusions or commentary the entry doesn't state.
-- Use ONLY what the entry says. Never invent details.
-- Write in the same language as the entry. Output the digest only."""
 
 # M5 collapse step: only used when the digests are still too long for one reduce prompt.
 COLLAPSE_SYSTEM = """You merge several day-by-day diary digests into one shorter digest.

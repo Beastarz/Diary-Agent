@@ -232,7 +232,7 @@ def summary(
     writer = summary_service.build_writer(summary_service.get_summary_model(max_tokens=200))
     reducer = summary_service.build_reducer(summary_service.get_summary_model(max_tokens=800))
     started = time.perf_counter()
-    with console.status(f"Condensing {len(entries)} entries, then writing the {period} review..."):
+    with console.status(f"Writing the {period} review from {len(entries)} entries..."):
         try:
             record = summary_service.summarize_period(
                 writer, reducer, entries, period, start, end, settings.chat_model

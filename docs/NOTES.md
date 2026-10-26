@@ -187,9 +187,17 @@ Final: grounded 9/9, low+high days named 6/6, recurring themes 3/3, no embellish
 - Saved summaries don't notice when entries are edited later. Re-run and overwrite.
 - chars / 4 underestimates tokens for CJK text. Fine while everything is English.
 
+### Later change: the map step is now code (prompt v1.10)
+The LLM condense call per entry was dropped. `day_line()` builds each day from fields extraction already wrote and the user approved when saving: `summary` + `highlights` + `challenges` + `gratitude` + `mood_words`. The transcript isn't read at all. Why:
+- **Extraction already *is* a map step.** It condenses the day once, and the user reviews the result. A second LLM pass over the same transcript was a duplicate, and it was unreviewed: the pottery distortion came from there.
+- **It still fits.** A day line is ~60 tokens, so 31 days is ~2,000 tokens. Collapse stays as the safety net.
+- **Measured** (same probe, 3 runs): every check still passes, sparse-week wording went 2/3 → 3/3, and a 10-entry month takes 4.3 s instead of ~15 s (one LLM call instead of 11).
+- A tried-and-dropped alternative: storing a per-entry `digest` at save time (your own words if under 30 words). The verbatim fragments lost their context ("No, skipped it." without "Did you get to run?"), and it was still a second, unreviewed copy of the day.
+- **Lesson:** before adding an LLM step, check whether an earlier step already produced what you need. The cheapest call is the one you don't make.
+
 ### Try this
-- `uv run python evals/summary_probe.py --runs 3`, then `--collapse`, and compare the saved digests in `evals/results/`.
-- Put "2-3 sentences" back into `CONDENSE_SYSTEM` and look at the Oct 8 digest.
+- `uv run python evals/summary_probe.py --runs 3`, then `--collapse`, and compare the reduce prompts in `evals/results/`.
+- Print `day_line(e)` for a few entries in your journal: that's exactly what the reduce step sees for each day.
 - `uv run diary summary --month --date 2026-10-01` on your own journal, then `--saved` after saving it.
 - Set `num_ctx=2048` in `get_summary_model` and paste a long transcript into an entry: watch the start of the month disappear without an error.
 

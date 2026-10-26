@@ -38,8 +38,8 @@ uv run diary list / show / reindex (rebuild Chroma from SQLite)
 uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summary(), no graph)
   period_range (calendar Mon–Sun / month) → list_entries(start, end) → none? stop, no LLM call
   summarize_period(writer, reducer, entries, ...)   all calls num_ctx=8192, temperature 0
-    map:      condense → writer.batch([CONDENSE_SYSTEM + entry_text(e)])   entry_text = fields + User: lines, capped
-              code prefixes each digest "Mon 2026-10-19 (mood 4): ..."
+    map:      day_line(e) per entry, in code (no LLM): "Mon 2026-10-19 (mood 4, felt tired): <summary>
+              Highlights: ... Challenges: ..." from the approved fields; transcript never read
     collapse: only if digests > REDUCE_INPUT_TOKENS; _groups packs consecutive digests; ≤ MAX_COLLAPSE_ROUNDS
     reduce:   REDUCE_SYSTEM + field_guide(PeriodSummary) + stats_text (code: avg, low/high day, tags 2+ days)
               → invoke_structured (retry w/ feedback) → PeriodSummary
@@ -53,7 +53,7 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 |---|---|---|---|
 | `core/config.py` | Env/.env-driven frozen settings | `Settings`, `settings`, `PROJECT_ROOT` | Config in one place; model choice is config, not code |
 | `core/llm.py` | Model factories | `get_chat_model(temperature, max_tokens, num_ctx)`, `get_embeddings()` (nomic-embed-text, 768-dim) | Depend on `BaseChatModel`; provider swap = one file; `num_ctx` None = Ollama default, overflow cut silently |
-| `core/prompts.py` | System prompts + version | `PROMPT_VERSION` (v1.8), `COMPANION_SYSTEM`, `CHECKIN_SYSTEM`, `TOOLS_SYSTEM`, `EXTRACT_SYSTEM`, `CONDENSE_SYSTEM`, `COLLAPSE_SYSTEM`, `REDUCE_SYSTEM` | Prompt versioning; TOOLS_SYSTEM appended only when tools are bound; `{calendar}` filled by code |
+| `core/prompts.py` | System prompts + version | `PROMPT_VERSION` (v1.8), `COMPANION_SYSTEM`, `CHECKIN_SYSTEM`, `TOOLS_SYSTEM`, `EXTRACT_SYSTEM`, `COLLAPSE_SYSTEM`, `REDUCE_SYSTEM` | Prompt versioning; TOOLS_SYSTEM appended only when tools are bound; `{calendar}` filled by code |
 | `services/agent/state.py` | Graph state + run deps | `DiaryState(MessagesState)`, `DiaryContext` (+ `vectors`), `Route` | State (checkpointed) vs context (deps); `add_messages` appends |
 | `services/agent/nodes.py` | Node functions | `router`, `chat_agent`, `LOOKUP_REQUEST`, `calendar_hint`, `_tool_rounds_this_turn`, `MAX_TOOL_ROUNDS`, `GAVE_UP`, `checkin`, `extract`, `confirm`, `save` | Code gate on *whether* tools are offered; code does date math; loop budget; save indexes after SQLite |
 | `services/agent/tools.py` | Read-only tools | `search_entries`, `get_entries_by_date`, `format_entry`, `_parse_range`, `MAX_DISTANCE`, `SEARCH_K`, `MAX_LISTED`, `TOOLS` | `@tool` docstring + `Annotated` args = the whole schema; `ToolRuntime[DiaryContext]` hidden from model; errors as strings; distance cutoff; capped output |
@@ -62,7 +62,7 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 | `models/entry.py` | Pydantic schemas | `ExtractedEntry` (LLM-inferred), `JournalEntry` (+ code-known fields) | Two-layer schema; all fields required; bounded lists; evidence before judgement |
 | `services/extraction.py` | Transcript → entry | `build_extractor`, `extract_entry`, `invoke_structured` (shared retry loop), `apply_guardrails`, `field_guide(schema)`, `format_transcript` | Structured output, retry-with-feedback, guardrails; transcript = only human/ai with content |
 | `models/summary.py` | Summary schemas | `PeriodSummary` (LLM-written: themes, wins, challenges, mood_trend, overview), `SummaryRecord` (+ range, count, `mood_avg`, model, version), `Period` | Same two-layer pattern as entry.py; numbers are code-known |
-| `services/summary.py` | Entries → review, map-reduce | `summarize_period`, `condense`, `collapse`, `_groups`, `reduce`, `apply_guardrails`, `stats_text`, `entry_text`, `period_range`, `mood_avg`, `estimate_tokens`, `build_writer`/`build_reducer`/`get_summary_model`, `NUM_CTX`, `MAP_INPUT_TOKENS`, `REDUCE_INPUT_TOKENS`, `MAX_COLLAPSE_ROUNDS`, `MIN_TREND_DAYS` | `batch()` = map; token budget (chars/4); collapse as last resort; code computes stats; guardrails override sparse trend |
+| `services/summary.py` | Entries → review, map-reduce | `summarize_period`, `day_line`, `collapse`, `_groups`, `reduce`, `apply_guardrails`, `stats_text`, `period_range`, `mood_avg`, `estimate_tokens`, `build_writer`/`build_reducer`/`get_summary_model`, `NUM_CTX`, `REDUCE_INPUT_TOKENS`, `MAX_COLLAPSE_ROUNDS`, `MIN_TREND_DAYS` | Map in code from approved fields; token budget (chars/4); collapse as last resort; code computes stats; guardrails override sparse trend |
 | `repositories/entry_repository.py` | SQLite repo | `connect` (`check_same_thread=False`), `save_entry`, `get_entry`, `list_entries(start, end)` | Lists as JSON text; pydantic round-trip |
 | `repositories/summary_repository.py` | SQLite summaries in journal.db | `save_summary`, `get_summary(period, start)`, `ensure_schema`; PK `(period, start_date)` | Reuses `entry_repository.connect`; table created on first use |
 | `cli/app.py` | Typer CLI, thin graph driver | `chat`, `run_turn`, `ask_to_save`, `list_cmd`, `show`, `reindex`, `summary` (`--week/--month` one bool flag), `render_summary` | CLI answers interrupts; resume-on-start; `reindex` repairs the index; summary save needs a yes |
@@ -114,12 +114,12 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 - **Measure tool use with split rates:** missed-call vs false-call (llama over-calls, qwen3 under-calls). Model-free retrieval check (recall 4/4) separates search from reasoning. NOTES M4.
 
 ### M5: Map-reduce summaries, context budgeting
-- **Map-reduce:** map = condense each entry (`writer.batch()`, LCEL's map); collapse only when over budget; reduce = structured `PeriodSummary`. Every call has a bounded input. `summarize_period`.
+- **Map-reduce:** map = `day_line` per entry (was an LLM condense via `writer.batch()`, LCEL's map; replaced 2026-10-26 because extraction already condensed the day and the user approved it); collapse only when over budget; reduce = structured `PeriodSummary`. `summarize_period`.
 - **Context window is a budget:** Ollama's default window cuts overflow *silently*. One fixed `NUM_CTX = 8192` for all summary calls (changing it reloads the model). Tokens estimated as chars/4.
-- **Cut cheap things first:** map input keeps only `User:` lines (assistant words aren't facts, ~half the tokens). `entry_text`.
+- **Don't redo a step you already have:** the LLM map re-condensed transcripts that extraction had already condensed. Dropping it: same checks, sparse 2/3 → 3/3, month 15 s → 4.3 s. A stored verbatim `digest` was tried and dropped (fragments lost context).
 - **Code computes the numbers** (avg, low/high day, recurring tags) → `stats_text`; code writes the digest date/mood prefix.
 - **But more computed facts aren't free:** a "Mood trend: down" line made the review skip low/high days (2/6 vs 6/6) → removed.
-- **Length demands cause invention:** "2-3 sentences" padded a short entry ("first project is now complete") → `CONDENSE_SYSTEM` "at most 3, one is fine".
+- **Length demands cause invention:** "2-3 sentences" padded a short entry ("first project is now complete") → "at most 3, one is fine" (that prompt was later removed with the LLM map step).
 - **Prompt rule failed again (0/3)** on sparse "steady throughout" → `apply_guardrails` writes `mood_trend` when < `MIN_TREND_DAYS`; also drops "good mood" as a win.
 - **Collapse has a floor:** forced 150-token budget → 9 extra calls, 2.3× slower, still over budget after 3 rounds; dates lost. `MAX_COLLAPSE_ROUNDS`.
 - **Errors compound across hops:** the pottery distortion came from *map*; reduce repeated it. Probe saves digests. NOTES M5.
@@ -146,7 +146,9 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 | Chroma = index, SQLite = truth; embed extracted fields | Index rebuildable; transcript chit-chat is noise | `vector_repository` |
 | Summaries via CLI, not a chat reply | A review in chat lands in today's transcript → extraction copies past events | `nodes.summarize`, `cli summary` |
 | Calendar periods (Mon–Sun, month), `--date` picks one | Matches `calendar_hint`; saved records keyed by `(period, start_date)` | `period_range` |
-| Map always runs; collapse only over budget | Digests make a month fit (~1.4k tokens for 31 days); merging loses dates | `summarize_period`, `collapse` |
+| Map step in code from approved fields, not an LLM | Extraction already condensed each day and the user approved it; the LLM map was a second, unreviewed copy (pottery distortion) | `day_line` |
+| No stored `digest` column | Tried 2026-10-26: verbatim short entries lost context; summary + fields does the job | NOTES M5 |
+| Collapse only over budget | A month of day lines fits (~2k tokens for 31 days); merging loses dates | `collapse` |
 | Retry loop shared (`invoke_structured`) | Same structured-output retry for entries and summaries | `services/extraction.py` |
 | Computed trend line removed | Measurably hurt the review (low/high named 2/6 vs 6/6) | `stats_text` docstring |
 | Code writes mood_trend for < 3 rated days | Prompt rule failed 0/3; 2 points aren't a trend | `apply_guardrails` (summary) |

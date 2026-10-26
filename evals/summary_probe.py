@@ -8,7 +8,7 @@ Checks are deterministic and crude (an LLM judge comes in M7):
 - grounded:  every win/challenge shares a content word with some entry it summarizes
 - recurring: themes mention a tag that really recurred (work, family, health)
 - mood:      mood_trend names both the lowest and the highest day (weekday, date or event)
-- embellish: no digest claims something finished that the entry says only started (pottery)
+- embellish: the review doesn't claim something finished that the entry says only started (pottery)
 - sparse:    with 2 entries in a week, no "consistently" / "throughout the week" claims
 - clean:     no CJK characters
 """
@@ -44,7 +44,7 @@ def words(text: str) -> set[str]:
 FINISHED = re.compile(r"\b(complet|finish)", re.IGNORECASE)
 
 
-def check(case: dict, record, entries, digests: list[str]) -> dict[str, bool]:
+def check(case: dict, record, entries) -> dict[str, bool]:
     source = set().union(*(words(" ".join([e.summary, *e.highlights, *e.challenges])) for e in entries))
     items = record.wins + record.challenges
     trend = record.mood_trend.lower()
@@ -52,8 +52,7 @@ def check(case: dict, record, entries, digests: list[str]) -> dict[str, bool]:
     res = {
         "grounded": all(words(i) & source for i in items),
         "clean": not CJK.search(text),
-        "embellish": not any(FINISHED.search(d) for d in digests if "pottery" in d.lower())
-        and not any(FINISHED.search(i) for i in [*items, record.overview] if "pottery" in i.lower()),
+        "embellish": not any(FINISHED.search(i) for i in [*items, record.overview] if "pottery" in i.lower()),
     }
     if case.get("sparse"):
         res["sparse"] = not OVERCLAIM.search(f"{record.overview} {record.mood_trend}")
@@ -86,17 +85,15 @@ def main():
 
     from diary_agent.core.prompts import COLLAPSE_SYSTEM
 
-    # Spy on the real summarize_period: count calls per stage (told apart by system prompt),
-    # keep the map digests, and keep the reduce prompt to see its token size.
-    calls: list[tuple[str, str]] = []  # (stage, text) where text is a digest or the reduce prompt
+    # Spy on the real summarize_period: count calls per stage and keep the reduce prompt
+    # (the code-built day lines + stats) to see its size and what the model was given.
+    calls: list[tuple[str, str]] = []  # (stage, prompt text)
 
     def spy(runnable, reduce_step: bool):
         def fn(messages):
             out = runnable.invoke(messages)
-            if reduce_step:
-                calls.append(("reduce", messages[1].content))
-            else:
-                calls.append(("collapse" if messages[0].content == COLLAPSE_SYSTEM else "map", out))
+            stage = "reduce" if reduce_step else "collapse" if messages[0].content == COLLAPSE_SYSTEM else "other"
+            calls.append((stage, messages[1].content))
             return out
 
         return RunnableLambda(fn)
@@ -115,15 +112,14 @@ def main():
                 t0 = time.perf_counter()
                 record = svc.summarize_period(writer, reducer, entries, case["period"], start, end, settings.chat_model)
                 seconds = time.perf_counter() - t0
-                digests = [text for stage, text in calls if stage == "map"]
-                counts = {s: sum(1 for c, _ in calls if c == s) for s in ("map", "collapse", "reduce")}
+                counts = {s: sum(1 for c, _ in calls if c == s) for s in ("collapse", "reduce")}
                 reduce_prompt = next(text for stage, text in reversed(calls) if stage == "reduce")
-                checks = check(case, record, entries, digests)
+                checks = check(case, record, entries)
                 summary = record.model_dump(include=set(PeriodSummary.model_fields))
                 records.append({
                     "case": case["id"], "run": i, "checks": checks, "calls": counts,
                     "reduce_prompt_tokens": svc.estimate_tokens(reduce_prompt),
-                    "seconds": round(seconds, 1), "summary": summary, "digests": digests,
+                    "seconds": round(seconds, 1), "summary": summary, "reduce_prompt": reduce_prompt,
                 })
                 print(f"\n--- {case['id']} run {i}: {len(entries)} entries, calls {counts}, "
                       f"reduce prompt ~{svc.estimate_tokens(reduce_prompt)} tokens, {seconds:.1f}s ---")

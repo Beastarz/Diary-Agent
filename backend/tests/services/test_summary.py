@@ -68,19 +68,15 @@ def test_stats_are_computed_in_code():
     assert svc.mood_avg([make_entry(1, None)]) is None
 
 
-def test_entry_text_keeps_user_lines_and_caps_length():
-    entry = make_entry(19, transcript="User: " + "a" * 500 + "\nAssistant: how lovely")
-    text = svc.entry_text(entry, max_tokens=50)
-    assert "Assistant" not in text and "how lovely" not in text
-    assert text.endswith(" [...]")
-    assert len(text.split("What the user said:\n")[1]) == 50 * svc.CHARS_PER_TOKEN + len(" [...]")
-
-
-def test_condense_one_call_per_entry_with_code_prefix():
-    writer, calls = recording_writer(lambda m: "  You worked.  ")
-    digests = svc.condense(writer, [make_entry(19, 4), make_entry(20, None)], "week")
-    assert len(calls) == 2
-    assert digests == ["Mon 2026-10-19 (mood 4): You worked.", "Tue 2026-10-20 (mood ?): You worked."]
+def test_day_line_uses_approved_fields_not_the_transcript():
+    entry = make_entry(19, 4, transcript="User: secret detail").model_copy(
+        update={"mood_words": ["tired"], "highlights": ["ramen with Mei"], "challenges": ["late night", "rain"]}
+    )
+    assert svc.day_line(entry) == (
+        "Mon 2026-10-19 (mood 4, felt tired): Day 19. Highlights: ramen with Mei. Challenges: late night; rain."
+    )
+    # Empty lists are left out; no mood shows as "?".
+    assert svc.day_line(make_entry(20, None).model_copy(update={"highlights": []})) == "Tue 2026-10-20 (mood ?): Day 20."
 
 
 def test_collapse_skipped_when_under_budget():
@@ -113,6 +109,7 @@ def test_summarize_period_end_to_end():
         writer, reducer, entries, "week", date(2026, 10, 19), date(2026, 10, 25), "fake"
     )
     assert record.themes == ["work"] and record.entry_count == 2 and record.mood_avg == 6.0
+    assert writer_calls == []  # no map calls: day lines come from code, and a week fits without collapsing
     prompt = reducer_calls[0][1].content
     assert prompt.index("Mon 2026-10-19") < prompt.index("Wed 2026-10-21")  # chronological
     assert "Mood average: 6.0/10" in prompt

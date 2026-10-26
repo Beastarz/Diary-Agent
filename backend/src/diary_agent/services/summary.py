@@ -1,13 +1,18 @@
 """Entries in a date range -> SummaryRecord, map-reduce style.
 
-    entries --map: condense each entry (LLM, batched)--------------> digests
+    entries --map: day_line per entry (code, no LLM)----------------> digests
             --collapse: merge groups while still too long (LLM)----> fewer digests
             --reduce: digests + computed stats -> PeriodSummary (LLM, structured)
 
-Why not paste a month of entries into one prompt? Context budgeting. Ollama's default window
+Why not paste a month of transcripts into one prompt? Context budgeting. Ollama's default window
 is a few thousand tokens and anything past it is cut off *silently*: the model just never sees
-the start of the month. A day's transcript can be thousands of tokens, a digest is ~80, so the
-map step is what makes 30 days fit. Every LLM call here has a known, bounded input size.
+the start of the month. A day's transcript can be thousands of tokens; its day_line is ~60.
+
+The map step used to be an LLM call per entry that condensed the transcript. It was dropped:
+extraction has already condensed each day into a summary + highlights + challenges, and the user
+approved those when saving. Re-condensing the transcript cost one call per entry, was never
+reviewed by anyone, and was where a distortion crept in ("started a pottery class" ->
+"completed"). Now the only LLM calls are reduce, plus collapse when over budget.
 
 The numbers (mood average, best/worst day, tag counts) are computed in code and handed to the
 reduce prompt. The LLM only writes the words.
@@ -22,7 +27,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
 
 from diary_agent.core.llm import get_chat_model
-from diary_agent.core.prompts import COLLAPSE_SYSTEM, CONDENSE_SYSTEM, PROMPT_VERSION, REDUCE_SYSTEM
+from diary_agent.core.prompts import COLLAPSE_SYSTEM, PROMPT_VERSION, REDUCE_SYSTEM
 from diary_agent.models.entry import JournalEntry
 from diary_agent.models.summary import Period, PeriodSummary, SummaryRecord
 from diary_agent.services.extraction import field_guide, invoke_structured
@@ -30,7 +35,6 @@ from diary_agent.services.extraction import field_guide, invoke_structured
 # The budget, in tokens. One fixed window for every summary call: changing num_ctx between
 # requests makes Ollama reload the model, which costs seconds. 8k fits in 8 GB VRAM with llama3.1:8b.
 NUM_CTX = 8192
-MAP_INPUT_TOKENS = 2000  # cap on one entry's text; long transcripts are cut, not the prompt
 REDUCE_INPUT_TOKENS = 3000  # digests per reduce/collapse prompt; leaves room for instructions + output
 MAX_COLLAPSE_ROUNDS = 3  # a model that won't shorten text must not loop forever
 MIN_TREND_DAYS = 3  # fewer rated days than this: no LLM-written mood trend
@@ -47,7 +51,7 @@ def get_summary_model(max_tokens: int) -> BaseChatModel:
 
 
 def build_writer(model: BaseChatModel) -> Runnable:
-    """messages -> plain text. Used for the map and collapse steps."""
+    """messages -> plain text. Used for the collapse step."""
     return model | StrOutputParser()
 
 
@@ -92,36 +96,18 @@ def stats_text(entries: list[JournalEntry], start: date, end: date) -> str:
     return "\n".join(lines)
 
 
-def entry_text(entry: JournalEntry, max_tokens: int = MAP_INPUT_TOKENS) -> str:
-    """One entry as map-step input: the extracted fields plus what the *user* said.
-    Assistant lines are dropped first. They aren't facts about the day and are about half the tokens."""
-    said = "\n".join(line for line in entry.transcript.splitlines() if line.startswith("User:"))
-    max_chars = max_tokens * CHARS_PER_TOKEN
-    if len(said) > max_chars:
-        said = said[:max_chars] + " [...]"
-    mood = f"{entry.mood}/10" if entry.mood else "not rated"
+def day_line(entry: JournalEntry) -> str:
+    """The map step, in code: one day for the reduce prompt, built only from fields the user
+    approved when saving. The transcript is never read here."""
+    mood = f"mood {entry.mood or '?'}"
     if entry.mood_words:
-        mood += f" ({', '.join(entry.mood_words)})"
-    parts = [
-        f"Date: {entry.entry_date:%A %Y-%m-%d}",
-        f"Mood: {mood}",
-        f"Highlights: {'; '.join(entry.highlights) or '-'}",
-        f"Challenges: {'; '.join(entry.challenges) or '-'}",
-        f"Gratitude: {'; '.join(entry.gratitude) or '-'}",
-        f"Summary: {entry.summary}",
-    ]
-    if said:
-        parts.append(f"What the user said:\n{said}")
-    return "\n".join(parts)
-
-
-def condense(writer: Runnable, entries: list[JournalEntry], period: Period) -> list[str]:
-    """The map step. batch() is LCEL's map: one prompt per entry, independent of each other.
-    Ollama queues requests it can't run in parallel, so this is safe on one GPU."""
-    system = SystemMessage(CONDENSE_SYSTEM.format(period=period))
-    bodies = writer.batch([[system, HumanMessage(entry_text(e))] for e in entries])
-    # The date and mood prefix come from code, so the reduce step can't lose or garble them.
-    return [f"{e.entry_date:%a %Y-%m-%d} (mood {e.mood or '?'}): {b.strip()}" for e, b in zip(entries, bodies)]
+        mood += f", felt {', '.join(entry.mood_words)}"
+    parts = [f"{entry.entry_date:%a %Y-%m-%d} ({mood}): {entry.summary}"]
+    for label, items in (("Highlights", entry.highlights), ("Challenges", entry.challenges),
+                         ("Grateful for", entry.gratitude)):
+        if items:
+            parts.append(f"{label}: {'; '.join(items)}.")
+    return " ".join(parts)
 
 
 def _groups(digests: list[str], budget: int) -> list[list[str]]:
@@ -135,7 +121,7 @@ def _groups(digests: list[str], budget: int) -> list[list[str]]:
 
 
 def collapse(writer: Runnable, digests: list[str], budget: int = REDUCE_INPUT_TOKENS) -> list[str]:
-    """Only runs when the digests are still over budget (rare: 31 days x ~80 tokens fits).
+    """Only runs when the digests are still over budget (rare: 31 days x ~60 tokens fits).
     Merging loses detail, so it's a last resort, not a default."""
     for _ in range(MAX_COLLAPSE_ROUNDS):
         if len(digests) <= 1 or estimate_tokens("\n\n".join(digests)) <= budget:
@@ -184,7 +170,7 @@ def summarize_period(
     if not entries:
         return None
     entries = sorted(entries, key=lambda e: e.entry_date)  # the repository returns newest first
-    digests = collapse(writer, condense(writer, entries, period))
+    digests = collapse(writer, [day_line(e) for e in entries])
     summary = apply_guardrails(reduce(reducer, digests, stats_text(entries, start, end), period), entries)
     return SummaryRecord(
         **summary.model_dump(),
