@@ -7,7 +7,7 @@ PROMPT_VERSION = "v1.10"
 # v1.4: mood_words/summary must come from the User only (assistant words leaked in)
 # v1.5: added CHECKIN_SYSTEM (M3 guided check-in)
 # v1.6: added TOOLS_SYSTEM (M4 tool calling); weekday shown next to today's date
-# v1.7: date cheat-sheet in TOOLS_SYSTEM, stricter when-to-call rule (from evals/tool_probe.py)
+# v1.7: date cheat-sheet in TOOLS_SYSTEM, stricter when-to-call rule (from the M4 tool eval, now run_evals.py --only tools)
 # v1.8: added CONDENSE_SYSTEM, COLLAPSE_SYSTEM, REDUCE_SYSTEM (M5 summaries)
 # v1.9: added MEMORY_SYSTEM, EXTRACT_MEMORY_SYSTEM; remember_fact rule in TOOLS_SYSTEM (M6 memory)
 # v1.10: removed CONDENSE_SYSTEM; summaries build each day's line in code (summary.day_line)

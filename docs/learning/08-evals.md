@@ -2,7 +2,7 @@
 
 Every important fix in this project came from a number, not a hunch. This note covers how those numbers were produced, and the ways they misled us.
 
-**Where to look:** [`evals/run_evals.py`](../../evals/run_evals.py), [`evals/evaluators.py`](../../evals/evaluators.py), [`evals/suites/`](../../evals/suites/), [`evals/datasets/`](../../evals/datasets/), [`evals/tests/`](../../evals/tests/), the probes in [`evals/`](../../evals/) (`tool_probe.py`, `summary_probe.py`, `memory_probe.py`), [`backend/tests/`](../../backend/tests/)
+**Where to look:** [`evals/run_evals.py`](../../evals/run_evals.py), [`evals/evaluators.py`](../../evals/evaluators.py), [`evals/suites/`](../../evals/suites/), [`evals/datasets/`](../../evals/datasets/), [`evals/tests/`](../../evals/tests/), the probes in [`evals/`](../../evals/) (`summary_probe.py`, `memory_probe.py`), [`backend/tests/`](../../backend/tests/)
 
 ---
 

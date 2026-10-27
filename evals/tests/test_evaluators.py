@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from diary_agent.models.entry import ExtractedEntry
-from evaluators import check_extraction, confusion, matches, mrr, rank_of, recall_at
+from evaluators import check_extraction, check_tool_turn, confusion, covers, has_cjk, matches, mrr, rank_of, recall_at
 
 D = date(2026, 10, 1)
 
@@ -74,3 +74,46 @@ def test_empty_and_mentions():
     res = check_extraction({"mood": [1, 10], "empty": ["gratitude"], "mentions": ["sister", "work"]}, e)
     assert res == {"mood": True, "empty": True, "mentions": True}
     assert not check_extraction({"mood": [1, 10], "empty": ["highlights"]}, e)["empty"]
+
+
+def test_has_cjk():
+    assert has_cjk("今天很好") and has_cjk("ありがとう") and has_cjk("감사합니다")
+    assert not has_cjk("Thanks, café time! 10k ✓")
+
+
+DATE_CASE = {"tools": ["get_entries_by_date"], "cover": ["2026-10-19"], "exclude": ["2026-10-12"]}
+
+
+def call(name, **args):
+    return {"name": name, "args": args}
+
+
+def test_covers_date_ranges():
+    assert covers(call("get_entries_by_date", start_date="2026-10-19"), DATE_CASE)  # one day
+    assert covers(call("get_entries_by_date", start_date="2026-10-18", end_date="2026-10-20"), DATE_CASE)
+    assert not covers(call("get_entries_by_date", start_date="2026-10-12", end_date="2026-10-19"), DATE_CASE)
+    assert not covers(call("get_entries_by_date", start_date="0000-00-00"), DATE_CASE)  # M4's junk date
+    assert not covers(call("search_entries", query="monday"), DATE_CASE)  # no dates never covers
+    any_case = {"cover_any": ["2026-10-13", "2026-10-20"]}
+    assert covers(call("get_entries_by_date", start_date="2026-10-13"), any_case)
+
+
+def test_check_tool_turn_split_by_kind():
+    ok = check_tool_turn(DATE_CASE, [call("get_entries_by_date", start_date="2026-10-19")], "You worked late.")
+    assert ok == {"tool": True, "args": True, "clean": True}
+    wrong_tool = check_tool_turn(DATE_CASE, [call("search_entries", query="monday")], "x")
+    assert not wrong_tool["tool"] and not wrong_tool["args"]
+    assert not check_tool_turn(DATE_CASE, [], "x")["tool"]  # missed call
+
+    none_case = {"tools": []}
+    assert check_tool_turn(none_case, [], "Hi!") == {"tool": True, "clean": True}
+    assert not check_tool_turn(none_case, [call("search_entries", query="hi")], "Hi!")["tool"]  # false call
+
+
+def test_check_tool_turn_answers():
+    topic = {"tools": ["search_entries"], "answer": ["ramen"]}
+    assert check_tool_turn(topic, [call("search_entries", query="sister")], "Ramen on the 14th!")["answer"]
+    assert not check_tool_turn(topic, [call("search_entries", query="")], "Sushi.")["args"]
+    missing = {"tools": ["search_entries"], "admits": True}
+    assert check_tool_turn(missing, [call("search_entries", query="ski")], "I couldn't find any skiing.")["answer"]
+    assert not check_tool_turn(missing, [call("search_entries", query="ski")], "You skied in Niseko!")["answer"]

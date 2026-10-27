@@ -147,7 +147,7 @@ Final llama3.1: tool choice 93%, args 83%, grounded answers 90%, 0% false tool c
 - The assistant's final reply about a past day stays in today's transcript, so extraction could still pick up past events from it. Watch for this in the M7 extraction eval.
 
 ### Try this
-- `uv run python evals/tool_probe.py --runs 3` (both models, ~4 min). Then delete the `LOOKUP_REQUEST` check in `chat_agent` and run `--models llama3.1:8b` again.
+- `uv run python evals/run_evals.py --only tools --runs 3` (the M7 harness now holds these cases; `DIARY_CHAT_MODEL=<model>` to compare). Then delete the `LOOKUP_REQUEST` check in `chat_agent` and run `--models llama3.1:8b` again.
 - Set `MAX_DISTANCE = 1.0` and ask about skiing.
 - In `diary chat`, ask "what did I write yesterday?" and watch the "Searching your journal..." status.
 
@@ -293,3 +293,23 @@ Known limit ([#9](https://github.com/Beastarz/Diary-Agent/issues/9)): `past_day_
 - `uv run python evals/run_evals.py --only routing`, then add a `"\bcheck in at\b"` exception to `CHECKIN_PHRASE` and rerun: watch the score move.
 - Set `MAX_DISTANCE = 0.40` and run `--only retrieval`: what do you gain and lose?
 - Add your own tricky transcript to `datasets/extraction.jsonl` and run `--only extraction`.
+
+## M7 (steps 4–5): tools and language in the harness
+- **Where to look:** `evals/suites/tools.py`, `evals/suites/language.py`, `evals/evaluators.py` (`check_tool_turn`, `covers`, `has_cjk`), `evals/datasets/tools*.jsonl`
+- **Tools** = M4's `tool_probe` (same 14 cases, same checks), now a suite: one turn through the real graph against a 10-entry journal, "today" fixed to Thu 2026-10-22. The chat model runs at its normal temperature (0.7), so use `--runs 3`. The checks moved into `evaluators.py` and got unit tests; the journal moved to `datasets/tools_journal.jsonl`, and `summary_probe.py` shares it.
+- **No `agentevals`.** Its trajectory match compares the sequence of tool calls. The checks that found real bugs here are about the *arguments* ("does the date range cover last Monday?"), so custom checks fit better. A dependency should earn its place.
+- **Language** costs nothing: it scans every text the other suites generated in the run (tool replies, extracted entries) for CJK characters, the M1 leak. It only covers what was generated; replies to non-English messages would need cases of their own.
+
+### Baseline (llama3.1:8b, v1.10, 3 runs, ~3m40s for all suites)
+| | |
+|---|---|
+| Tools | all checks 79%, tool choice 98%, args 87%, answer 83%, missed calls 3%, false calls 0%, 1.4 s/turn |
+| Language | no CJK in 120 of 120 texts |
+
+Close to M4's final numbers (tool choice 93%, args 83%, grounded 90%), as expected for the same cases.
+
+Failures, after checking the checker:
+- **Real:** "What did I make at my pottery class?" got an invented "yesterday you said you were looking forward to your pottery class", and once "I don't have any information". "Running records?" twice got a vague "you've been doing great" with no record named.
+- **Real but harmless:** "Monday this week" fetched the whole week (19–25), "last Tuesday" fetched 20–25. Too wide; the answers were still right.
+- **Checker wrong (fixed):** "It's been 8 days since you last saw your sister" is correct (Oct 14 → 22) but didn't match the keywords `ramen` / `14`. Added `8 days`, `wednesday`.
+- **Debatable (open):** "running records *recently*" via `get_entries_by_date` found the right answer, but the label only allows `search_entries`. Same question as M4.

@@ -33,7 +33,7 @@ CHECKIN_TOPICS = (
 MAX_TOOL_ROUNDS = 3  # per user turn; small models can keep calling tools forever
 GAVE_UP = "Sorry, I couldn't find that in your journal."
 # Tools are only offered for questions and requests. llama3.1 called a tool on 75% of plain
-# statements ("thanks", "I'm anxious") even with a prompt rule against it (evals/tool_probe.py),
+# statements ("thanks", "I'm anxious") even with a prompt rule against it (M4 tool eval; run_evals.py --only tools),
 # so the code decides when tools are on the table and the model decides which one.
 LOOKUP_REQUEST = re.compile(r"\?|^\s*(tell|remind|show|find|look|search|list|summari[sz]e)\b", re.IGNORECASE)
 # The same idea per tool: remember_fact is only offered for an imperative "remember that ...".
@@ -89,7 +89,7 @@ def _companion_prompt(state: DiaryState, runtime: Runtime[DiaryContext], extra: 
 
 def calendar_hint(day: date, days_back: int = 13) -> str:
     """Code does the calendar math; the model only looks dates up. 8B models get "last Monday"
-    wrong when they have to compute it (evals/tool_probe.py), but copy a listed date reliably."""
+    wrong when they have to compute it (M4 tool eval; run_evals.py --only tools), but copy a listed date reliably."""
     monday = day - timedelta(days=day.weekday())
     fmt = lambda d: f"{d:%A} {d.isoformat()}"  # noqa: E731
     lines = [

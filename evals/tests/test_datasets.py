@@ -62,3 +62,27 @@ def test_routing_suite_runs_without_a_model():
     out = routing.run(runs=1)
     assert out["metrics"]["n_cases"] == len(load_jsonl("routing.jsonl"))
     assert 0 <= out["metrics"]["route_accuracy"] <= 1
+
+
+def test_tools_cases_reference_real_tools_and_days():
+    from diary_agent.services.agent.tools import TOOLS
+
+    names = {t.name for t in TOOLS}
+    days = {date.fromisoformat(r["date"]) for r in load_jsonl("tools_journal.jsonl")}
+    rows = load_jsonl("tools.jsonl")
+    assert unique_ids(rows)
+    for r in rows:
+        assert set(r["tools"]) <= names, r["id"]
+        for key in ("cover", "cover_any", "exclude"):
+            for d in r.get(key, []):
+                date.fromisoformat(d)  # valid date
+        assert "answer" not in r or r["tools"], f"{r['id']}: answer checks need a lookup"
+        assert all(date.fromisoformat(d) in days for d in r.get("cover", [])), r["id"]
+
+
+def test_language_suite_flags_only_cjk():
+    from suites import language
+
+    out = language.run_on({"tools": ["Hello!", "好的"], "extraction": ["You ran."]})
+    assert out["metrics"] == {"no_cjk": 2 / 3, "n_texts": 3}
+    assert len(out["failures"]) == 1

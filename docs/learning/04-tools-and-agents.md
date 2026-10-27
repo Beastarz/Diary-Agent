@@ -2,7 +2,7 @@
 
 How the agent decides to look things up, how to design tools a small model can use, and how to keep a tool-calling model from going off the rails.
 
-**Where to look:** [`services/agent/tools.py`](../../backend/src/diary_agent/services/agent/tools.py), [`services/agent/nodes.py`](../../backend/src/diary_agent/services/agent/nodes.py) (`chat_agent`, `tools_for`, `calendar_hint`, `confirm_memory`), [`services/agent/graph.py`](../../backend/src/diary_agent/services/agent/graph.py), [`evals/tool_probe.py`](../../evals/tool_probe.py)
+**Where to look:** [`services/agent/tools.py`](../../backend/src/diary_agent/services/agent/tools.py), [`services/agent/nodes.py`](../../backend/src/diary_agent/services/agent/nodes.py) (`chat_agent`, `tools_for`, `calendar_hint`, `confirm_memory`), [`services/agent/graph.py`](../../backend/src/diary_agent/services/agent/graph.py), [`evals/suites/tools.py`](../../evals/suites/tools.py)
 
 ---
 
@@ -54,7 +54,7 @@ How the agent decides to look things up, how to design tools a small model can u
 ---
 
 ### Try it
-- `uv run python evals/tool_probe.py --runs 3`. Then delete the `LOOKUP_REQUEST` check in `tools_for` and run it again: watch false tool calls come back.
+- `uv run python evals/run_evals.py --only tools --runs 3`. Then delete the `LOOKUP_REQUEST` check in `tools_for` and run it again: watch false tool calls come back.
 - `uv run python evals/memory_probe.py --part tool`, then change `MEMORY_REQUEST` to `\bremember\b` and rerun.
 - In `diary chat`, ask "what did I write yesterday?" and watch the "Searching your journal..." status.
 

@@ -15,7 +15,7 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M4 Tools / ReAct agent | ✅ done |
 | M5 Summaries | ✅ done |
 | M6 Long-term memory | ✅ done |
-| M7 Evals | 🔨 steps 0–3 done (harness, routing, retrieval, extraction); 4–7 next |
+| M7 Evals | 🔨 steps 0–5 done (harness, routing, retrieval, extraction, tools, language); 6–7 next |
 | M8 | todo |
 
 Change log:
@@ -78,13 +78,12 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
   evals/                         needs Ollama; measures model quality
     run_evals.py                 ✓ M7 harness: scorecard + deltas vs last run, results JSON
     evaluators.py                ✓ pure scoring functions (unit-tested in evals/tests/)
-    suites/                      ✓ routing, retrieval, extraction (extraction replaced M2's extract_probe.py)
-    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 questions, extraction 25
+    suites/                      ✓ routing, retrieval, extraction, tools, language (replaced extract_probe.py, tool_probe.py)
+    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 q, extraction 26, tools 14 (+10-entry journal)
     tests/                       ✓ checker + dataset-sanity tests, run by pytest/CI (no Ollama)
-    tool_probe.py                ✓ M4 tool-use eval (14 cases, --models to compare, retrieval check)
     summary_probe.py             ✓ M5 summary probe (3 cases, --collapse forces the merge step)
     memory_probe.py              ✓ M6 memory probe (extraction, similarity calibration, tool choice)
-    suites/ for steps 4-7        M7: tool trajectories, language, LLM judge, simulated user
+    suites/ for steps 6-7        M7: LLM judge, simulated user
   scripts/
     smoke.py                     ✓ Ollama connectivity check
   docs/
@@ -131,7 +130,9 @@ Results are saved as JSON with prompt version + model name, so runs can be compa
 - **Step 1 — routing** (no LLM). Labelled messages → router route + which tools the code gate offers. Accuracy + confusion matrix.
 - **Step 2 — retrieval** (embeddings only). ~60 synthetic entries + questions with known answer days → recall@1, recall@k, MRR, and whether "nothing found" questions are rejected by `MAX_DISTANCE`.
 - **Step 3 — extraction** (the most important one now that summaries read the fields directly). ~25 transcripts with gold labels, including the known failures. Replaces `extract_probe.py`.
-- **Steps 4–7 — later:** tool trajectories (fold in `tool_probe`), language check, LLM judge (decide the judge model then, and calibrate it against hand grades first), simulated user.
+- **Step 4 — tools ✓.** `tool_probe` folded in: one turn through the real graph; tool choice, date args, grounded answer; missed vs false calls reported separately. No `agentevals`: our checks are about the arguments, which its trajectory match doesn't cover.
+- **Step 5 — language ✓.** Free: scans every text the other suites generated for CJK leaks.
+- **Steps 6–7 — next:** LLM judge (decide the judge model then, and calibrate it against hand grades first), simulated user.
 
 **M8 (optional polish).** Export entries to Markdown, `diary list`, safety guardrail node, local tracing viewer.
 

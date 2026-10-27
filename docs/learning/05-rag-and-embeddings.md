@@ -48,7 +48,7 @@ Retrieval-augmented generation: find the relevant past entries, then let the mod
 
 ### 9. Test ranking without a model, and evaluate retrieval separately from reasoning
 - **Concept:** A fake embedding lets you unit-test search logic. In evals, measure retrieval on its own so you know whether a bad answer came from search or from the model.
-- **In this repo:** `backend/tests/conftest.py → KeywordEmbeddings` (bag-of-words vectors), so the ranking and cutoff code is tested without Ollama. `tool_probe.py` includes a model-free retrieval check.
+- **In this repo:** `backend/tests/conftest.py → KeywordEmbeddings` (bag-of-words vectors), so the ranking and cutoff code is tested without Ollama. The retrieval suite (`run_evals.py --only retrieval`) measures ranking and the cutoff with embeddings only, no chat model.
 - **Why it matters:** In M4 that check had recall 4/4, which proved the remaining failures were the model's reasoning, not Chroma.
 
 ---

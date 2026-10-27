@@ -1,0 +1,18 @@
+// One user turn each, through the real graph, against tools_journal.jsonl with today = Thu 2026-10-22.
+// tools: acceptable tools ([] = none should be called). cover / cover_any / exclude: days a date-tool
+// range must (not) include. answer: any keyword in the reply. admits: reply must say nothing was found.
+// From M4's tool_probe (same 14 cases), see evaluators.check_tool_turn.
+{"id": "date_yesterday", "text": "What did I do yesterday?", "tools": ["get_entries_by_date"], "cover": ["2026-10-21"], "exclude": ["2026-10-20", "2026-10-22"], "answer": ["dentist", "monstera", "plant"]}
+{"id": "date_specific", "text": "What did I write on October 12?", "tools": ["get_entries_by_date"], "cover": ["2026-10-12"], "exclude": ["2026-10-13"], "answer": ["presentation"]}
+{"id": "date_monday", "text": "How was my Monday this week?", "tools": ["get_entries_by_date"], "cover": ["2026-10-19"], "exclude": ["2026-10-12", "2026-10-21"], "answer": ["q4", "report", "deadline", "late"]}
+{"id": "date_tuesday", "text": "What happened last Tuesday?", "tools": ["get_entries_by_date"], "cover_any": ["2026-10-20", "2026-10-13"], "exclude": ["2026-10-21", "2026-10-22"], "answer": ["grandma", "roommate", "dishes"]}
+{"id": "date_last_week", "text": "How was my week last week?", "tools": ["get_entries_by_date"], "cover": ["2026-10-12", "2026-10-17"], "exclude": ["2026-10-08", "2026-10-20"], "answer": ["presentation", "roommate", "ramen", "sister", "cold", "10k"]}
+{"id": "topic_sister", "text": "When did I last see my sister?", "tools": ["search_entries"], "answer": ["ramen", "14", "8 days", "eight days", "wednesday"]}
+{"id": "topic_pottery", "text": "What did I make at my pottery class?", "tools": ["search_entries"], "answer": ["bowl"]}
+{"id": "topic_running", "text": "Have I set any running records recently?", "tools": ["search_entries"], "answer": ["10k", "10 k", "personal best"]}
+{"id": "topic_roommate", "text": "Did I have any fights with my roommate?", "tools": ["search_entries"], "answer": ["dishes"]}
+{"id": "topic_missing", "text": "When did I last go skiing?", "tools": ["search_entries", "get_entries_by_date"], "admits": true}
+{"id": "none_greeting", "text": "hey! how's it going?", "tools": []}
+{"id": "none_today", "text": "Today I had a really long meeting and I'm exhausted.", "tools": []}
+{"id": "none_feeling", "text": "I'm feeling kind of anxious tonight.", "tools": []}
+{"id": "none_thanks", "text": "thanks, that actually helps", "tools": []}

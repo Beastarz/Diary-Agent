@@ -1,0 +1,12 @@
+// 10-entry journal for the tools suite (and summary_probe). "Today" is fixed to Thursday 2026-10-22
+// (suites/tools.py TODAY), so "yesterday" and "last week" have known answers. From M4's tool_probe.
+{"date": "2026-10-08", "mood": 7, "summary": "You started a pottery class and made a wonky bowl.", "highlights": ["first pottery class", "made a bowl"], "challenges": [], "tags": ["hobby"]}
+{"date": "2026-10-10", "mood": 7, "summary": "You hiked Bukit Timah with Mei and got caught in the rain at the top.", "highlights": ["hike with Mei"], "challenges": ["rain"], "tags": ["outdoors", "friends"]}
+{"date": "2026-10-12", "mood": 8, "summary": "Your big work presentation went well and your manager praised you.", "highlights": ["presentation went well", "manager praised you"], "challenges": ["nerves before presenting"], "tags": ["work"]}
+{"date": "2026-10-13", "mood": 4, "summary": "You argued with your roommate about the dishes and felt stressed.", "highlights": [], "challenges": ["argument with roommate about dishes"], "tags": ["home", "stress"]}
+{"date": "2026-10-14", "mood": 8, "summary": "You had dinner with your sister at a new ramen place.", "highlights": ["ramen dinner with sister"], "challenges": [], "tags": ["family", "food"]}
+{"date": "2026-10-15", "mood": 3, "summary": "You were sick with a cold and stayed home all day.", "highlights": [], "challenges": ["cold", "stayed home"], "tags": ["health"]}
+{"date": "2026-10-17", "mood": 9, "summary": "You ran a 10k and set a personal best.", "highlights": ["10k personal best"], "challenges": [], "tags": ["running", "health"]}
+{"date": "2026-10-19", "mood": 4, "summary": "You worked late on the Q4 report because of a deadline.", "highlights": [], "challenges": ["Q4 report deadline", "worked late"], "tags": ["work"]}
+{"date": "2026-10-20", "mood": 8, "summary": "You called your grandma and she told stories about her childhood.", "highlights": ["call with grandma"], "challenges": [], "tags": ["family"]}
+{"date": "2026-10-21", "mood": 6, "summary": "You went to the dentist, then bought a monstera plant.", "highlights": ["new monstera plant"], "challenges": ["dentist appointment"], "tags": ["errands"]}

@@ -2,7 +2,7 @@
 
 Run: uv run python evals/summary_probe.py [--runs 2] [--collapse]
 
-Uses tool_probe's seeded 10-entry October journal (summaries + fields, no transcripts).
+Uses the tools suite's 10-entry October journal (datasets/tools_journal.jsonl: fields, no transcripts).
 --collapse shrinks the reduce budget so the collapse step has to run, to see what merging loses.
 Checks are deterministic and crude (an LLM judge comes in M7):
 - grounded:  every win/challenge shares a content word with some entry it summarizes
@@ -22,7 +22,10 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-from tool_probe import CJK, D, seed
+from evaluators import CJK
+from suites import seed_journal
+
+D = lambda day: date(2026, 10, day)  # noqa: E731
 
 STOP = {"the", "a", "an", "and", "with", "your", "you", "of", "to", "at", "on", "in", "for", "about", "new", "got"}
 CASES = [
@@ -103,7 +106,7 @@ def main():
 
     records = []
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # Chroma may hold file locks
-        conn, _ = seed(Path(tmp), DeterministicFakeEmbedding(size=8))  # vectors unused here
+        conn, _ = seed_journal("tools_journal.jsonl", Path(tmp), DeterministicFakeEmbedding(size=8))  # vectors unused here
         for case in CASES:
             start, end = svc.period_range(case["period"], case["day"])
             entries = entry_repo.list_entries(conn, start=start, end=end)

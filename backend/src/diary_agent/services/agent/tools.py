@@ -69,7 +69,7 @@ def search_entries(
     ctx = runtime.context
     hits = vector_repo.search(ctx.vectors, query, k=SEARCH_K)
     # Nearest-neighbour search always returns k results, relevant or not. Without a cutoff the
-    # model "finds" a ski trip in a pottery entry (seen in evals/tool_probe.py).
+    # model "finds" a ski trip in a pottery entry (seen in the M4 tool eval; run_evals.py --only tools).
     days = [day for day, distance in hits if distance <= MAX_DISTANCE]
     entries = [e for day in days if (e := entry_repo.get_entry(ctx.conn, day))]
     if not entries:

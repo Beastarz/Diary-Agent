@@ -13,26 +13,19 @@ from datetime import date
 from pathlib import Path
 
 from evaluators import mrr, rank_of, rate, recall_at
-from suites import load_jsonl
+from suites import load_jsonl, seed_journal
 
 DEPTH = 10  # how deep to rank for MRR; the tool itself only looks at SEARCH_K
 
 
 def run(runs: int) -> dict:
-    from diary_agent.models.entry import JournalEntry
     from diary_agent.repositories import vector_repository as vector_repo
     from diary_agent.services.agent.tools import MAX_DISTANCE, SEARCH_K
 
     cases, failures = [], []
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # Chroma may hold file locks
-        store = vector_repo.open_store(Path(tmp) / "chroma")
-        for row in load_jsonl("retrieval_journal.jsonl"):
-            vector_repo.upsert_entry(store, JournalEntry(
-                entry_date=date.fromisoformat(row["date"]), mood=row["mood"], mood_words=[],
-                highlights=row["highlights"], challenges=row["challenges"], gratitude=[], tags=row["tags"],
-                summary=row["summary"], transcript="", model="eval-seed", prompt_version="eval",
-            ))
-
+        conn, store = seed_journal("retrieval_journal.jsonl", Path(tmp))
+        conn.close()  # only the index is searched here
         for q in load_jsonl("retrieval_questions.jsonl"):
             hits = vector_repo.search(store, q["q"], k=DEPTH)
             gold = {date.fromisoformat(d) for d in q["gold"]}

@@ -40,7 +40,7 @@ def run(runs: int) -> dict:
     from diary_agent.services.extraction import ExtractionError, build_extractor, extract_entry, get_extraction_model
 
     extractor = build_extractor(get_extraction_model())
-    cases, failures = [], []
+    cases, failures, texts = [], [], []
     by_check: dict[str, list[bool]] = defaultdict(list)
     for case in load_jsonl("extraction.jsonl"):
         transcript = to_transcript(case)
@@ -53,6 +53,7 @@ def run(runs: int) -> dict:
                 failures.append(f"{case['id']:<26} run {i}: invalid ({e})")
                 continue
             checks = check_extraction(case, entry)
+            texts.append(" ; ".join([entry.summary, *entry.highlights, *entry.challenges, *entry.gratitude]))
             by_check["valid"].append(True)
             for name, ok in checks.items():
                 by_check[name].append(ok)
@@ -68,4 +69,4 @@ def run(runs: int) -> dict:
     metrics = {"all_checks_pass": rate([all(c["checks"].values()) for c in valid] + [False] * (len(cases) - len(valid)))}
     metrics.update({name: rate(values) for name, values in by_check.items()})
     metrics["n_cases"] = len({c["id"] for c in cases})
-    return {"metrics": metrics, "cases": cases, "failures": failures}
+    return {"metrics": metrics, "cases": cases, "failures": failures, "texts": texts}
