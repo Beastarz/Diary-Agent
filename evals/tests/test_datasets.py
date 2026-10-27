@@ -86,3 +86,34 @@ def test_language_suite_flags_only_cjk():
     out = language.run_on({"tools": ["Hello!", "好的"], "extraction": ["You ran."]})
     assert out["metrics"] == {"no_cjk": 2 / 3, "n_texts": 3}
     assert len(out["failures"]) == 1
+
+
+def test_chat_cases_use_known_checks():
+    from judge import CHECKS, RUBRICS
+
+    assert set(RUBRICS) == set(CHECKS)
+    rows = load_jsonl("chat.jsonl")
+    assert unique_ids(rows)
+    for r in rows:
+        assert r["turns"] and set(r["checks"]) <= set(CHECKS), r["id"]
+    ids = {r["id"]: r for r in rows}
+    for p in load_jsonl("judge_planted.jsonl"):
+        assert p["case"] in ids, p["case"]
+        assert set(p["fails"]) <= set(ids[p["case"]]["checks"]), f"{p['case']}: planted fail on a check not graded"
+
+
+def test_judge_sees_what_the_grader_sees():
+    from judge import view
+
+    text = view("User: hi", "", "Hello!")
+    assert "(nothing looked up)" in text and text.endswith("Hello!")
+
+
+def test_gold_file_is_graded_with_known_values():
+    from judge_calibrate import CHECKS, GOLD, GRADES, read_gold
+
+    if not GOLD.exists():
+        return  # not sampled yet
+    for r in read_gold():
+        for c in CHECKS:
+            assert r[c].strip().lower() in {"", "n/a", *GRADES}, f"row {r['row']} {c}: {r[c]!r}"

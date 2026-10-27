@@ -6,7 +6,8 @@ from datetime import date
 import pytest
 
 from diary_agent.models.entry import ExtractedEntry
-from evaluators import check_extraction, check_tool_turn, confusion, covers, has_cjk, matches, mrr, rank_of, recall_at
+from evaluators import (agreement, check_extraction, check_tool_turn, confusion, count_questions, covers, has_cjk,
+                        matches, mrr, rank_of, recall_at)
 
 D = date(2026, 10, 1)
 
@@ -117,3 +118,18 @@ def test_check_tool_turn_answers():
     missing = {"tools": ["search_entries"], "admits": True}
     assert check_tool_turn(missing, [call("search_entries", query="ski")], "I couldn't find any skiing.")["answer"]
     assert not check_tool_turn(missing, [call("search_entries", query="ski")], "You skied in Niseko!")["answer"]
+
+
+def test_count_questions():
+    assert count_questions("That sounds hard. What happened?") == 1
+    assert count_questions("Really?! Why?? And then?") == 3  # "?!" and "??" are one question each
+    assert count_questions("Congratulations!") == 0
+
+
+def test_agreement_scores_fails_separately():
+    # A lazy judge that always passes agrees 3 of 4 times but catches no fail.
+    lazy = agreement([(True, True), (True, True), (True, True), (False, True)])
+    assert lazy["agree"] == 0.75 and lazy["fail_catch"] == 0.0 and lazy["false_alarm"] == 0.0
+    harsh = agreement([(True, False), (True, True), (False, False)])
+    assert harsh["fail_catch"] == 1.0 and harsh["false_alarm"] == 0.5
+    assert harsh["n_graded"] == 3 and harsh["n_human_fails"] == 1

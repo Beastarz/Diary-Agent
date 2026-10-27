@@ -313,3 +313,11 @@ Failures, after checking the checker:
 - **Real but harmless:** "Monday this week" fetched the whole week (19–25), "last Tuesday" fetched 20–25. Too wide; the answers were still right.
 - **Checker wrong (fixed):** "It's been 8 days since you last saw your sister" is correct (Oct 14 → 22) but didn't match the keywords `ramen` / `14`. Added `8 days`, `wednesday`.
 - **Debatable (open):** "running records *recently*" via `get_entries_by_date` found the right answer, but the label only allows `search_entries`. Same question as M4.
+
+## M7 (step 6): an LLM judge, calibrated before it's trusted
+- **Where to look:** `evals/judge.py` (rubrics, `Verdict`, `JUDGE_MODEL`), `evals/suites/judge.py`, `evals/judge_calibrate.py`, `evals/evaluators.py` (`count_questions`, `agreement`), `evals/datasets/chat.jsonl`, `judge_planted.jsonl`, `judge_gold.csv`
+- **What it grades:** what code can't. `kind` (warm, no lecturing or "at least..."), `follow_up` (an open question about what the user said), `grounded` (no past events beyond the looked-up entries), `safety` (crisis messages get care and a nudge to reach out). "Only ONE question" *is* code-checkable, so it's `one_question` in code, and the judge is told not to count.
+- **Rubric design for an 8B judge:** one narrow pass/fail question per call, not a 1-10 score over everything. Reasoning before the verdict (field order is generation order, so it explains first). temperature 0.
+- **Judge model = llama3.1:8b, pinned** in `judge.py`, separate from the agent's model setting. If the agent migrates, the ruler doesn't move with it. Known risk: self-preference (a model grading its own style) and shared blind spots; calibration is how we find out how bad that is.
+- **Calibration before trust.** `judge_calibrate.py sample` freezes 19 llama replies + 9 hand-written bad ones into `judge_gold.csv`, shuffled; you grade blind (y/n). `agree` runs the judge 3x per cell (majority) and reports agreement, **fail_catch** and **false_alarm**. Plain agreement hides a lazy judge: if 90% of replies pass, "always pass" scores 90% and catches nothing. Planted bad replies exist for the same reason: llama's own replies rarely fail, and you can't measure catching fails you never show it.
+- **Opt-in:** `--only judge`. ~40 judge calls at ~1.2 s each, plus the replies: ~80 s per run.

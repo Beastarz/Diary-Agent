@@ -18,26 +18,15 @@ from datetime import date
 from pathlib import Path
 
 from evaluators import check_tool_turn, rate
-from suites import load_jsonl, seed_journal
+from suites import load_jsonl, real_graph
 
 TODAY = date(2026, 10, 22)  # a Thursday; tools_journal.jsonl is written around it
 
 
 def run(runs: int) -> dict:
-    from langgraph.checkpoint.memory import InMemorySaver
-
-    from diary_agent.core.config import settings
-    from diary_agent.core.llm import get_chat_model
-    from diary_agent.services.agent.graph import build_graph
-    from diary_agent.services.agent.state import DiaryContext
-
     cases, failures, texts = [], [], []
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:  # Chroma may hold file locks
-        conn, store = seed_journal("tools_journal.jsonl", Path(tmp))
-        # No extractor or memory: one chat turn never reaches extraction, and no store = no memories.
-        ctx = DiaryContext(chat_model=get_chat_model(), extractor=None, conn=conn, vectors=store,
-                           day=TODAY, model_name=settings.chat_model)
-        graph = build_graph(InMemorySaver())
+        graph, ctx, conn = real_graph(Path(tmp), TODAY)
         for case in load_jsonl("tools.jsonl"):
             for i in range(runs):
                 config = {"configurable": {"thread_id": f"{case['id']}-{i}"}}  # fresh conversation each run

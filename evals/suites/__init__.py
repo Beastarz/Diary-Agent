@@ -35,3 +35,20 @@ def seed_journal(name: str, folder: Path, embeddings=None):
         entry_repo.save_entry(conn, entry)
         vector_repo.upsert_entry(store, entry)
     return conn, store
+
+
+def real_graph(folder: Path, today):
+    """The app's own graph and chat model over tools_journal.jsonl, with "today" fixed so date
+    answers are known. No extractor or memory: a chat turn never reaches extraction, and no store =
+    no memories. Returns (graph, context, conn); close conn when done."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from diary_agent.core.config import settings
+    from diary_agent.core.llm import get_chat_model
+    from diary_agent.services.agent.graph import build_graph
+    from diary_agent.services.agent.state import DiaryContext
+
+    conn, store = seed_journal("tools_journal.jsonl", folder)
+    ctx = DiaryContext(chat_model=get_chat_model(), extractor=None, conn=conn, vectors=store,
+                       day=today, model_name=settings.chat_model)
+    return build_graph(InMemorySaver()), ctx, conn

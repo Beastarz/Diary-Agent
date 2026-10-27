@@ -161,3 +161,29 @@ def check_tool_turn(case: dict, calls: list[dict], reply: str) -> dict[str, bool
         res["answer"] = any(k in text for k in ADMITS)
     res["clean"] = not has_cjk(reply)
     return res
+
+
+# --- judge -------------------------------------------------------------------------------
+
+def count_questions(text: str) -> int:
+    """Questions asked, counted in code: "ONE follow-up question" is a rule code can check, so the
+    judge only grades what code can't (is the question open, and about what the user said?)."""
+    return len(re.findall(r"\?+", text))
+
+
+def agreement(pairs: list[tuple[bool, bool]]) -> dict[str, float]:
+    """(human, judge) pass/fail pairs -> how far the judge can be trusted on one check.
+
+    Plain agreement hides a lazy judge: if 90% of replies pass, a judge that always says "pass"
+    agrees 90% of the time and catches nothing. So the fails get their own numbers:
+    fail_catch = of the replies a human failed, how many the judge failed too;
+    false_alarm = of the replies a human passed, how many the judge failed anyway."""
+    human_fails = [judge for human, judge in pairs if not human]
+    human_passes = [judge for human, judge in pairs if human]
+    return {
+        "agree": rate([human == judge for human, judge in pairs]),
+        "fail_catch": rate([not judge for judge in human_fails]),
+        "false_alarm": rate([not judge for judge in human_passes]),
+        "n_graded": len(pairs),
+        "n_human_fails": len(human_fails),
+    }

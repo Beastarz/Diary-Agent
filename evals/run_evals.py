@@ -1,12 +1,14 @@
 """M7 eval harness: one command, one scorecard, one results file per run.
 
-Run: uv run python evals/run_evals.py [--only routing,retrieval,extraction,tools] [--runs 2]
+Run: uv run python evals/run_evals.py [--only routing,retrieval,extraction,tools,judge] [--runs 2]
 
 Suites (cheapest first):
 - routing     no LLM. Labelled messages -> the router's route, and which tools the code gate offers.
 - retrieval   embeddings only. Seeded 60-entry journal + questions with known answer days.
 - extraction  chat model. Transcripts with gold labels -> extract_entry().
 - tools       chat model. One turn through the real graph: right tool, right dates, grounded reply.
+- judge       chat model + LLM judge, opt-in (--only judge): kind, follow-up, grounded, crisis care.
+              Calibrate it first: judge_calibrate.py.
 - language    free, automatic: scans every text the suites above generated for CJK leaks.
 
 Results go to evals/results/evals-<timestamp>.json with the model, prompt version and git commit.
@@ -21,7 +23,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-SUITES = ("routing", "retrieval", "extraction", "tools")
+SUITES = ("routing", "retrieval", "extraction", "tools")  # the default run
+OPT_IN = ("judge",)  # slow: only with --only
 RESULTS = Path(__file__).parent / "results"
 
 
@@ -67,7 +70,7 @@ def main():
     parser.add_argument("--runs", type=int, default=2, help="repeats for LLM suites (outputs vary)")
     args = parser.parse_args()
     chosen = [s.strip() for s in args.only.split(",") if s.strip()]
-    unknown = set(chosen) - set(SUITES)
+    unknown = set(chosen) - set(SUITES) - set(OPT_IN)
     if unknown:
         parser.error(f"unknown suite(s): {', '.join(sorted(unknown))}")
 
