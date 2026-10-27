@@ -30,6 +30,7 @@ How the chat loop became a graph that survives restarts, pauses for human approv
 - **Concept:** Keep the flow's position in checkpointed state. Each new turn's router reads it and continues where the flow left off.
 - **In this repo:** The check-in spans several user turns using `mode` and `checkin_step`. The *code* picks each topic from `CHECKIN_TOPICS`; the model only words the question.
 - **Why it matters:** The flow is fully controlled by code and survives a restart halfway through. You can change the check-in by editing a list, without touching any prompt.
+- **Trade-off:** Code control is rigid. The check-in always moves to the next topic, even right after the user shares hard news (found by simulated users, issue #15). And the model still sometimes drifts off the scripted topic (4 of 12 simulated check-ins skipped gratitude, #13).
 
 ### 6. The checkpointer is short-term memory
 - **Concept:** A checkpointer saves state after every node, keyed by `thread_id`. Run the graph again with the same thread and you pick up where you left off.

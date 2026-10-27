@@ -38,8 +38,8 @@ Every important fix in this project came from a number, not a hunch. This note c
 
 ### 7. Isolate components, cheapest first, and look inside the pipeline
 - **Concept:** Evaluate each stage on its own, so a failure points at one component. Run the cheap suites first.
-- **In this repo:** Routing (no LLM, instant) → retrieval (embeddings only, seconds) → extraction (chat model, ~1 min). The tool probe has a model-free retrieval check. The summary probe saves intermediate digests and counts calls per stage.
-- **Why it matters:** The retrieval check proved search was fine (4/4), so the remaining failures were reasoning. The saved digests showed a summary error came from the *map* step, not the reduce.
+- **In this repo:** Routing (no LLM, instant) → retrieval (embeddings only, seconds) → extraction (chat model, ~1 min) → tools (one real graph turn per case) → language (free: it scans every text the other suites generated for CJK leaks). The slow `judge` and `simulation` suites are opt-in (`--only judge,simulation`; see [note 9](09-llm-judges-and-simulation.md)). The summary probe saves intermediate digests and counts calls per stage.
+- **Why it matters:** In M4, a model-free retrieval check proved search was fine (4/4), so the remaining failures were reasoning. The saved digests showed a summary error came from the *map* step, not the reduce.
 
 ### 8. Noise: repeat runs, and compare variants side by side
 - **Concept:** Outputs vary even at temperature 0, and they can shift *between sessions*. Compare variants back to back, with repeats.
@@ -58,4 +58,4 @@ Every important fix in this project came from a number, not a hunch. This note c
 - `uv run python evals/run_evals.py --only routing`, then add an exception for "check in at" to `CHECKIN_PHRASE` and rerun.
 - Add your own tricky transcript to `evals/datasets/extraction.jsonl` and run `--only extraction`.
 
-**Full story:** [NOTES.md](../NOTES.md) → M1 (first eval), M2 ("The eval loop in practice"), M7 (harness, baseline, "First fix through the loop"). Roadmap for the remaining eval steps (tool trajectories, language check, LLM judge, simulated user): [PLAN.md](../PLAN.md) → M7.
+**Full story:** [NOTES.md](../NOTES.md) → M1 (first eval), M2 ("The eval loop in practice"), M7 (harness, baseline, "First fix through the loop"). Next: [note 9](09-llm-judges-and-simulation.md) covers the LLM judge and simulated users (M7 steps 6–7).

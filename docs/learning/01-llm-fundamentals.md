@@ -39,7 +39,7 @@ The building blocks under everything else: how you talk to a chat model, how Lan
 ### 7. Choose the model with a measurement, not a reputation
 - **Concept:** Small models have quirks that only show up on your task. Measure them on your own inputs.
 - **In this repo:** qwen3:8b slipped Chinese characters into English replies ("your sister特别 special"). A tiny probe (3 messages × 3 repeats, regex for CJK characters) found qwen3 leaked in 1–3 of 9 replies under every setting, while llama3.1 leaked in 0 of 27. In M4, qwen3 also missed 40% of needed tool calls (llama 7%).
-- **Why it matters:** A prompt fix ("reply in the user's language") didn't stop the leak, and neither did changing the sampling settings. The *model* was the problem. Only measuring told us that. This tiny probe was the project's first eval.
+- **Why it matters:** A prompt fix ("reply in the user's language") didn't stop the leak, and neither did changing the sampling settings. The *model* was the problem. Only measuring told us that. This tiny probe was the project's first eval. In M7 it became the `language` suite, which costs nothing: it scans every text the other suites generate (120 of 120 clean).
 
 ### 8. Prompts are code: version them
 - **Concept:** Prompts change behaviour as much as code does, so give them a version and record it with every result.

@@ -50,6 +50,7 @@ How to turn a free-form conversation into reliable, typed data with an 8B local 
 - **Concept:** If a rule can be checked with plain code, enforce it after the model runs. It's 100% reliable, can be unit-tested, and can't be broken by a later prompt change.
 - **In this repo:** `services/extraction.py → apply_guardrails()` drops gratitude the user never expressed, and mood words the user didn't use themselves. The summary and memory services each have their own `apply_guardrails` / `apply_memory_guardrails`.
 - **Why it matters:** A prompt fix (v1.4) fixed one case but **broke another**. The guardrail fixed both, permanently. The trade-off is that it drops some legitimate inferences ("happy" from "great day"). That's acceptable here because the spec says "use the user's own words".
+- **But a guardrail can be too strict, and it won't tell you.** In M7, simulated check-ins showed the gratitude rule deleting *real* gratitude in 5 of 12 entries: the check-in asks "what are you grateful for?", and the answer ("my sister offered to help") doesn't contain "grateful". `asked_for_gratitude()` now counts an answer to a gratitude question as explicit. Only a whole-flow test could see two milestones' rules clash ([note 9](09-llm-judges-and-simulation.md), point 10).
 
 ---
 

@@ -1,10 +1,10 @@
 # Repo learnings (AI-maintained)
 
-last_synced_commit: 6c8fa3f
+last_synced_commit: 671898d
 last_synced: 2026-10-27
-current_milestone: M6 done; M7 steps 0–3 done (harness, routing, retrieval, extraction), steps 4–7 next
+current_milestone: M7 steps 0–7 built; judge round 2 done but `CALIBRATED` still empty (r4 + fresh batch next); M8 optional
 
-> Maintained by the `learn-repo` skill. The code map and concept index live here. The narrative, experiments, and eval tables live in `docs/NOTES.md`. Roadmap lives in `docs/PLAN.md`. Topic-organised notes for other learners live in `docs/learning/` (01–09 + README, written 2026-10-27 by this skill). Keep them in step when a lesson changes (e.g. a fix supersedes one in 09's table).
+> Maintained by the `learn-repo` skill. The code map and concept index live here. The narrative, experiments, and eval tables live in `docs/NOTES.md`. Roadmap lives in `docs/PLAN.md`. Topic-organised notes for other learners live in `docs/learning/` (01–10 + README, by this skill; 09 = judge/simulation, 10 = principles capstone). Keep them in step when a lesson changes (e.g. a fix supersedes one in 09's table).
 
 ## End-to-end flow (as of M7 step 3)
 
@@ -69,16 +69,19 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 | `services/memory.py` | Memory write policy + read injection | `apply_memory_guardrails` (evidence ≥0.8 user words, `TRANSIENT`, 120 chars, `THIRD_PERSON` rule), `extract_memories`, `propose` (`DUPLICATE_SCORE` 0.90 skip, `RELATED_SCORE` 0.70 same kind → update), `apply_proposals`, `select_for_prompt` (`MAX_INJECTED` 15, else goals + top-5 ≥0.5), `memory_block` | Memory pollution; precision before recall; thresholds chosen by error cost |
 | `repositories/vector_repository.py` | Chroma index, one vector per day | `open_store` (cosine, telemetry off), `entry_text`, `upsert_entry` (id = date), `search` → `(date, distance)`, `_day_key`, `DOC_PREFIX`/`QUERY_PREFIX`, `count` | Vector store as a rebuildable index, SQLite is truth; embed extracted fields, not transcript; nomic task prefixes; numeric date metadata for `$gte` |
 | `models/entry.py` | Pydantic schemas | `ExtractedEntry` (LLM-inferred), `JournalEntry` (+ code-known fields) | Two-layer schema; all fields required; bounded lists; evidence before judgement |
-| `services/extraction.py` | Transcript → entry | `build_extractor`, `extract_entry`, `invoke_structured` (shared retry loop), `apply_guardrails`, `field_guide(schema)`, `format_transcript` | Structured output, retry-with-feedback, guardrails; transcript drops tool msgs and the assistant reply after a lookup (M7 past-day leak) |
+| `services/extraction.py` | Transcript → entry | `build_extractor`, `extract_entry`, `invoke_structured` (shared retry loop), `apply_guardrails`, `asked_for_gratitude` (answer to a gratitude question = explicit), `field_guide(schema)`, `format_transcript` | Structured output, retry-with-feedback, guardrails; transcript drops tool msgs and the assistant reply after a lookup (M7 past-day leak) |
 | `models/summary.py` | Summary schemas | `PeriodSummary` (LLM-written: themes, wins, challenges, mood_trend, overview), `SummaryRecord` (+ range, count, `mood_avg`, model, version), `Period` | Same two-layer pattern as entry.py; numbers are code-known |
 | `services/summary.py` | Entries → review, map-reduce | `summarize_period`, `day_line`, `collapse`, `_groups`, `reduce`, `apply_guardrails`, `stats_text`, `period_range`, `mood_avg`, `estimate_tokens`, `build_writer`/`build_reducer`/`get_summary_model`, `NUM_CTX`, `REDUCE_INPUT_TOKENS`, `MAX_COLLAPSE_ROUNDS`, `MIN_TREND_DAYS` | Map in code from approved fields; token budget (chars/4); collapse as last resort; code computes stats; guardrails override sparse trend |
 | `repositories/entry_repository.py` | SQLite repo | `connect` (`check_same_thread=False`), `save_entry`, `get_entry`, `list_entries(start, end)` | Lists as JSON text; pydantic round-trip |
 | `repositories/summary_repository.py` | SQLite summaries in journal.db | `save_summary`, `get_summary(period, start)`, `ensure_schema`; PK `(period, start_date)` | Reuses `entry_repository.connect`; table created on first use |
 | `cli/app.py` | Typer CLI, thin graph driver | `chat`, `run_turn`, `answer_interrupt` → `ask_to_save` / `ask_to_remember` (list[bool]), `list_cmd`, `show`, `reindex`, `summary`, `render_summary`, `memory_app` (`list`, `add`, `forget`) | CLI answers interrupts; resume-on-start; `reindex` repairs the index; every write needs a yes |
 | `evals/run_evals.py` | M7 harness: one scorecard, deltas vs the previous run, results JSON (+ commit, `+dirty`) | `SUITES`, `scorecard`, `previous_metrics`, `kind` (n_* counts, avg_*/*mrr/*distance numbers, rest rates), `report`; language runs on `texts` the other suites return | Measure → change one thing → re-measure |
-| `evals/evaluators.py` | Pure scoring functions | `check_extraction` (only scores checks a case defines), `matches` ("a\|b"), `confusion`, `rank_of`, `recall_at`, `mrr`, `check_tool_turn`, `covers`, `has_cjk`/`CJK`, `ADMITS` | Test the checker (evals/tests/, runs in CI) |
-| `evals/suites/` + `datasets/*.jsonl` | routing (45, no LLM), retrieval (60 entries + 30 q, embeddings), extraction (26, replaced extract_probe), tools (14, real graph, today = 2026-10-22, replaced tool_probe), language (free, scans generated texts) | `run(runs) -> {metrics, cases, failures, texts?}`, `load_jsonl`, `seed_journal` | Labels = correct intent, so known misses fail; `test_datasets.py` catches label typos |
+| `evals/evaluators.py` | Pure scoring functions | `check_extraction` (only scores checks a case defines), `matches` ("a\|b"), `confusion`, `rank_of`, `recall_at`, `mrr`, `check_tool_turn`, `covers`, `has_cjk`/`CJK`, `ADMITS`, `count_questions`, `agreement` (agree / fail_catch / false_alarm), `in_character`, `said_gold` | Test the checker (evals/tests/, runs in CI) |
+| `evals/suites/` + `datasets/*.jsonl` | routing (45, no LLM), retrieval (60 entries + 30 q, embeddings), extraction (26, replaced extract_probe), tools (14, real graph, today = 2026-10-22, replaced tool_probe), language (free, scans generated texts); opt-in: judge (`chat.jsonl` 19 + `judge_planted.jsonl` 9), simulation (`personas.jsonl` 6) | `run(runs) -> {metrics, cases, failures, texts?}`, `load_jsonl`, `seed_journal` | Labels = correct intent, so known misses fail; `test_datasets.py` catches label typos |
 | `evals/summary_probe.py` | M5 summary probe, 3 cases × N via real `summarize_period` | seeds `datasets/tools_journal.jsonl` via `seed_journal`; `spy()` counts map/collapse/reduce by system prompt; checks grounded/mood/recurring/embellish/sparse/clean; `--collapse` | Inspect intermediate outputs (digests), not just the final answer |
+| `evals/judge.py` | LLM judge | `JUDGE_MODEL` (pinned llama3.1:8b), `RUBRIC_VERSION` (r3), `CHECKS` (kind, follow_up, grounded, safety), `RUBRICS`, `Verdict` (reasoning before `passed`), `view`, `grade`, `CALIBRATED` (empty) | One narrow pass/fail per call; pinned ruler; unverified until calibrated |
+| `evals/judge_calibrate.py` | Hand grades vs judge | `sample` → `datasets/judge_gold.csv` (blind, shuffled), `add_sim` (check-in rows), `agree` (3 runs, majority) | Calibration before trust; fail_catch beats raw agreement |
+| `evals/simulator.py` + `suites/simulation.py` | Simulated user through a full `/checkin` | `SIM_MODEL` (pinned), `SIM_SYSTEM`, `sim_reply`, `converse`, `inject`, `MAX_ANSWERS`, `JUDGED` | Whole-flow test; code approves save; entry scored with `check_extraction` on what the sim actually said |
 | `evals/memory_probe.py` | M6 memory probe: `--part extract\|similarity\|tool` | 8 transcripts, `PAIRS` similarity calibration, tool choice | Candidates vs post-guardrail; calibrate thresholds on measured scores |
 | `backend/tests/services/test_memory.py`, `agent/test_memory_graph.py`, `repositories/test_memory_repository.py` | Memory tests on `InMemoryStore` | — | Guardrails, propose/dedupe, interrupt + placeholder swap through the graph |
 | `backend/tests/services/test_summary.py`, `repositories/test_summary_repository.py` | Summary plumbing tests | — | RunnableLambda writer + scripted reducer; budget logic, ordering, guardrails, no-entries = no call |
@@ -155,6 +158,16 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 - **Between-session drift at temp 0:** compare variants back to back with repeats. A/B 72% (code) vs 71% (code + prompt) → kept the code fix in `format_transcript`.
 - **Open:** issue #9 past-day recall without a lookup still extracted as today. NOTES M7.
 
+### M7 (steps 4–7): tools, language, judge, simulation
+- **Tools suite** = tool_probe folded in (checks → `check_tool_turn`, unit-tested): choice 98%, args 87%, false calls 0%. Checker fix: "8 days since" was correct. No `agentevals` (bugs were in *args*, not call order).
+- **Language suite is free:** scans `texts` other suites returned; 120/120 clean.
+- **Judge only for what code can't check;** `one_question` is code. One rubric per check, pass/fail, reasoning first, temp 0. No `openevals` (no bad-JSON retry).
+- **Calibrate before trusting:** blind hand grades, judge 3× majority; agreement + **fail_catch** + false_alarm; planted bad replies because real ones rarely fail. Gate: agree ≥ 85% and fail_catch ≥ 80% → `CALIBRATED`.
+- **Disagreements were definitions** (judge 95–100% consistent): safety judge was right (no reach-out = product gap); grounded widened (invented feelings). r1 → r2 grounded 38% → 100%.
+- **Calibration has a range / overfitting:** grounded r2 failed check-in reflection (19%) → r3; round 2 on new check-in rows: grounded 100% → 65%, follow_up 95% → 84%; judge misreads the conversation (8B limit). `kind` unverified.
+- **Simulator pitfalls:** same model = too cooperative; forgets script → `said_gold`/`avg_gold_unsaid`; slips into assistant voice → `in_character` drops the run; `inject` pins the key line.
+- **Whole-flow test found a rule clash:** M2 gratitude guardrail × M3 check-in question deleted real gratitude 5/12 → `asked_for_gratitude`; entry all-checks 25% → 50%. Logged #13 topic drift, #14 lookup mid check-in invented, #15 moves on after hard news. NOTES M7 steps 4–7.
+
 ## Decision log
 
 | Decision | Why | Where |
@@ -190,9 +203,14 @@ uv run diary summary --week|--month [--date D] [--saved]   (cli/app.py → summa
 | DUPLICATE 0.90 / RELATED 0.70 same-kind | Similarity can't tell update from different fact; prefer a 2nd memory over overwriting | `services/memory.py` |
 | Code drops assistant reply after a lookup (not a "today only" prompt rule) | A/B 72% vs 71%; rule pulled assistant words back in | `format_transcript` |
 | Eval datasets as JSONL labelled with correct answers | Known misses must show as failures | `evals/datasets/` |
+| Custom tool checks, no `agentevals`; own judge, no `openevals` | Bugs were in tool args; 8B judge needs `invoke_structured` retry | `evaluators.check_tool_turn`, `judge.py` |
+| Judge = llama3.1:8b, pinned apart from the agent (2026-10-27) | Ruler must not move when the agent migrates; self-preference risk accepted, measured by calibration | `judge.JUDGE_MODEL` |
+| Judge checks count only after calibration (agree ≥ 85%, fail_catch ≥ 80%) | Uncalibrated r1 grounded agreed 38% | `judge.CALIBRATED` |
+| An answer to a gratitude question counts as explicit gratitude | Guardrail emptied real gratitude in 5/12 simulated check-ins | `extraction.asked_for_gratitude` |
 
 ## Open questions / coming next
-- M7 steps 6–7: LLM judge (pick + calibrate vs hand grades), simulated user. Open issues: #9 no-lookup recall leak, #10 non-events in highlights, #11 router plain-language misses, #12 search cutoff margin. M8 optional polish.
+- Judge: r4 for grounded + follow_up, tested on a fresh `add-sim` batch (not rows 29–40); `kind` unverified; `CALIBRATED` empty. M8 optional polish.
+- Open issues: #9 past-day leak (also user-mentioned past events, 2/2), #10 non-events in highlights, #11 router plain-language misses, #12 search cutoff margin, #13 check-in topic drift, #14 lookups mid check-in invented, #15 moves on after hard news.
 - Known M7 findings to fix: router misfires ("check in at the hotel", plain-word "save it"), retrieval cutoff margin 0, extraction `not_in`/`forbidden` 50% (assistant's words, plans as events, "8 out of 10", wrong `work` tag), issue #9.
 - Known M6 limits: value changes become a 2nd memory; declined candidate re-proposed same day; chat-only days add nothing; history trimming not done (full day resent).
 - Known M5 limits: overview still overgeneralizes from sparse data ("great month" from 1 entry; sparse check 2/3); keyword "grounded" check is crude; saved summaries go stale if entries change; chars/4 underestimates CJK.

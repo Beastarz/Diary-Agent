@@ -9,7 +9,7 @@ The single most repeated lesson. The model is good at language and judgement; co
 
 | Rule we wanted | Prompt-only result | Code fix | Result |
 |---|---|---|---|
-| Only list gratitude the user expressed (M2) | prompt tweak broke another case | `extraction.apply_guardrails` | 100%, can't regress |
+| Only list gratitude the user expressed (M2) | prompt tweak broke another case | `extraction.apply_guardrails` | 100%, can't regress (but see principle 11) |
 | No tool calls on small talk (M4) | 75% → 75% false calls | `LOOKUP_REQUEST` gate in `tools_for` | 0% |
 | Get "Monday this week" right (M4) | wrong dates | `calendar_hint` cheat-sheet | date args 50% → 90% |
 | Don't claim a trend from 2 days (M5) | 0/3 | `summary.apply_guardrails` writes `mood_trend` | fixed |
@@ -56,13 +56,26 @@ llama3.1 over-calls tools; qwen3 under-called them and leaked CJK characters. 8B
 ### 10. Local-first means privacy by construction
 Everything lives in `data/`, which is git-ignored, and a CI `privacy` job fails if journal data, eval results or secrets (`data/`, `*.db`, `chroma/`, `.env`) are ever tracked, even after a `git add -f`. A diary must never be published by accident.
 
+### 11. Test the path users actually take
+Pieces that pass on their own can fail together:
+- **M3:** The unit tests used `invoke`, but the CLI streams, which runs nodes in worker threads. The SQLite crash only showed up in real use.
+- **M7:** M2's gratitude guardrail and M3's check-in were each correct, but together they deleted real gratitude in 5 of 12 simulated check-ins.
+
+Component tests tell you each piece works. Only the real code path, or a simulated user going through the whole flow, tells you the product works ([note 9](09-llm-judges-and-simulation.md)).
+
+### 12. Your measuring tools need measuring too
+Keyword checkers marked correct answers as failures (M4, M5), so `evaluators.py` got unit tests. The first LLM judge agreed with a human only 38% of the time on groundedness, so no judge score counts until it's calibrated (`judge.CALIBRATED` is still empty). The simulated user forgot its own script, so `said_gold` scores only what it actually said. Every layer of measurement gets its own check.
+
 ---
 
 ### Open problems worth trying yourself
-- The keyword router starts a check-in on "I had to check in at the hotel" (M7 routing: route 82%, tool gate 62%).
-- `MAX_DISTANCE` has no margin at 60 entries (0.41 vs 0.41). Is there a better "nothing found" signal than one threshold?
-- Value-change memory updates ("moved to Leeds") get added as a second memory. Would an LLM "same fact?" check work, and how would you eval it?
-- The summary overview still overgeneralises from sparse data ("great month" from 1 entry). The planned M7 LLM judge is meant to measure this.
-- Issue #9: past-day recall without a tool lookup leaks into today's entry.
+- **Router:** plain-language commands ("save it", "summarise my week") aren't understood, and "check in at the hotel" starts a check-in (#11; routing 82%, tool gate 62%).
+- **Search cutoff:** `MAX_DISTANCE` has no margin at 60 entries (0.41 vs 0.41) (#12). Is there a better "nothing found" signal than one threshold?
+- **Past days in today's entry (#9):** the assistant recalling a past day without a lookup, or the *user* mentioning one ("last Saturday I ran a half marathon"), still becomes today's highlight.
+- **Non-events in highlights (#10):** plans ("looking forward to a nice sleep") and scores ("8 out of 10").
+- **Check-in flow:** drifts off its topics (#13), invents answers to lookups (#14), moves on right after hard news (#15).
+- **Judge:** can a fresh blind batch get `grounded` and `follow_up` over the calibration bar, or does it need a stronger judge model than the agent's own?
+- **Memory:** value changes ("moved to Leeds") get added as a second memory. Would an LLM "same fact?" check work, and how would you eval it?
+- **Summaries:** the overview still overgeneralises from sparse data ("great month" from 1 entry), and it stays unmeasured until the judge is calibrated.
 
 **Full story:** [PLAN.md](../PLAN.md) → "Design principles", and the "Lessons" sections of each milestone in [NOTES.md](../NOTES.md).

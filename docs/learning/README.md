@@ -16,9 +16,10 @@ These notes pull the lessons out of the code and reorganise them **by topic** ra
 | 6 | [Context budgets & summaries](06-context-and-summaries.md) | Context windows, map-reduce, when *not* to add an LLM step | M5 |
 | 7 | [Long-term memory](07-memory.md) | Short- vs long-term memory, write policies, avoiding memory pollution | M6 |
 | 8 | [Evals](08-evals.md) | Tests vs evals, the eval loop, labels, checking the checker, noise | M1–M7 |
-| 9 | [Agent design principles](09-agent-design-principles.md) | The patterns that kept coming back, with the evidence for each | all |
+| 9 | [LLM judges & simulated users](09-llm-judges-and-simulation.md) | Rubrics, calibrating a judge against hand grades, whole-conversation tests and their pitfalls | M7 |
+| 10 | [Agent design principles](10-agent-design-principles.md) | The patterns that kept coming back, with the evidence for each | all |
 
-New to LLM apps? Read 1 → 9 in order. Already know LangChain? Start at 3, then read 8 and 9.
+New to LLM apps? Read 1 → 10 in order. Already know LangChain? Start at 3, then read 8, 9 and 10.
 
 ## How each note is laid out
 

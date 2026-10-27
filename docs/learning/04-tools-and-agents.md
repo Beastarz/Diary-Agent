@@ -51,6 +51,10 @@ How the agent decides to look things up, how to design tools a small model can u
 - **In this repo:** `services/extraction.py → format_transcript()` drops tool messages, tool-call messages, **and the assistant's answer after a tool result** (until the user speaks again).
 - **Why it matters (M7 eval):** The assistant said "Last Saturday you ran a 10k", and extraction put "ran a 10k" into *today's* highlights every time. A "today only" prompt rule fixed that case but broke two others. The code fix works because the code *knows* which replies came from a lookup; a prompt can only ask the model to guess.
 
+### Known gaps (found by later evals)
+- The M7 `tools` suite reproduces M4's numbers (tool choice 98%, args 87%, missed calls 3%, false calls 0%, 3 runs). Remaining failures: an invented answer ("yesterday you said you were looking forward to your pottery class"), and date ranges that are too wide ("Monday this week" fetched the whole week) but still give the right answer.
+- The check-in node offers no tools, so a lookup asked in the middle of a check-in gets an *invented* answer, and the question lands in the entry (#14). Turning tools off for a mode doesn't stop users asking.
+
 ---
 
 ### Try it
