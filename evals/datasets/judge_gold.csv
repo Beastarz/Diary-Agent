@@ -51,63 +51,63 @@ User: My landlord raised the rent again and I don't know how I'll cover it.",(no
 Assistant: You're taking a moment to reflect on your day. How have you been feeling overall today, emotionally speaking?
 User: Pretty good! Hey, when did I last see my sister?
 Assistant: You mentioned you're feeling pretty good, which is a great note to start on. What's one thing that's been a highlight for you today, something that's stood out in a positive way?
-User: The sunny weather was really nice today. Made it a great day to get to the gym before work.",(nothing looked up),The sunshine and exercise seem to have put you in a good mood. What's been the most challenging or stressful part of your day so far?,n/a,,,n/a,
+User: The sunny weather was really nice today. Made it a great day to get to the gym before work.",(nothing looked up),The sunshine and exercise seem to have put you in a good mood. What's been the most challenging or stressful part of your day so far?,n/a,y,y,n/a,
 30,sim_past_leak,"User: Let's do a check-in.
 Assistant: You've decided to do a check-in today. How are you feeling overall about your day so far?
-User: It's been pretty meh, to be honest. I'd say I'm at about a 6 out of 10, I guess. Nothing's really gone wrong, it's just been a pretty quiet day at home with chores.",(nothing looked up),"It sounds like the day hasn't been particularly exciting, but at least nothing has gone wrong, which is a relief. What was the highlight of your day, something that made it even slightly brighter?",n/a,,,n/a,
+User: It's been pretty meh, to be honest. I'd say I'm at about a 6 out of 10, I guess. Nothing's really gone wrong, it's just been a pretty quiet day at home with chores.",(nothing looked up),"It sounds like the day hasn't been particularly exciting, but at least nothing has gone wrong, which is a relief. What was the highlight of your day, something that made it even slightly brighter?",n/a,y,y,n/a,
 31,sim_terse_meh,"User: Let's do a check-in.
 Assistant: I'm here to listen. You've started a check-in, which means you're taking time to reflect on your day. How are you feeling overall today?
 User: 5 out of 10, I guess.
 Assistant: It sounds like today has been a bit of a mixed bag for you. What was the highlight of your day so far?
-User: Dinner was good, leftover curry.",(nothing looked up),It's nice that you have something comforting to look back on. What was the most stressful or challenging part of your day so far?,n/a,,,n/a,
+User: Dinner was good, leftover curry.",(nothing looked up),It's nice that you have something comforting to look back on. What was the most stressful or challenging part of your day so far?,n/a,y,y,n/a,
 32,sim_talkative_good,"User: Let's do a check-in.
 Assistant: You're here to reflect on your day. What's been the most notable part of your day so far?
 User: Getting promoted to team lead at work this morning was a huge highlight. I'm still in shock, to be honest! It's been a goal of mine for a while, and it feels amazing to have achieved it.
 Assistant: Congratulations on your promotion! It sounds like a huge accomplishment. What did the moment feel like when you got the news, was there a particular emotion or memory that stands out to you?
 User: It was all a bit of a blur, but I remember feeling a mix of excitement and relief. Our boss just dropped the news casually, like it was no big deal, but I knew it was a huge deal for me. I think I just sat there with a huge grin on my face for a bit, trying to process it all.
 Assistant: It's lovely that you have that memory of your reaction. What's something you're a bit worried about now that you're taking on this new role as team lead?
-User: I'm a bit worried about the added responsibilities, to be honest. I'm not sure if I'm ready to handle the extra workload, but I'm sure I'll figure it out.",(nothing looked up),You're acknowledging the potential challenges ahead. What's one thing you're grateful for about your current work environment or colleagues that might make this transition easier for you?,n/a,,,n/a,
+User: I'm a bit worried about the added responsibilities, to be honest. I'm not sure if I'm ready to handle the extra workload, but I'm sure I'll figure it out.",(nothing looked up),You're acknowledging the potential challenges ahead. What's one thing you're grateful for about your current work environment or colleagues that might make this transition easier for you?,n/a,y,y,n/a,
 33,sim_past_leak,"User: Let's do a check-in.
 Assistant: You've decided to take some time to reflect on your day. How are you feeling overall today, after everything that's happened?
 User: I'd say I'm feeling okay, I guess. Nothing too exciting or stressful happened, which was nice. A bit of a meh day, but my call with my mom was definitely the highlight. She always knows how to make me feel better.
 Assistant: It sounds like the conversation with your mom really lifted your mood. What was it about your mom's call that made it stand out as the highlight of your day?
 User: Not much today, just chores. Oh, but last Saturday I ran my first half marathon! My legs are still sore.
 Assistant: Congratulations on completing your first half marathon, that's a huge accomplishment! How are you feeling about your recovery from the run, and are you still dealing with any lingering soreness?
-User: Yeah, my legs are still pretty sore, actually. It's been a few days and I'm hoping it'll start to feel better soon. Other than that, just taking it easy and letting them recover.",(nothing looked up),It's great that you're being patient with your recovery. What are you most looking forward to doing once your legs feel better?,n/a,,,n/a,
+User: Yeah, my legs are still pretty sore, actually. It's been a few days and I'm hoping it'll start to feel better soon. Other than that, just taking it easy and letting them recover.",(nothing looked up),It's great that you're being patient with your recovery. What are you most looking forward to doing once your legs feel better?,n/a,y,y,n/a,
 34,sim_past_leak,"User: Let's do a check-in.
 Assistant: You've decided to take some time to reflect on your day. How are you feeling overall today, after everything that's happened?
-User: I'd say I'm feeling okay, I guess. Nothing too exciting or stressful happened, which was nice. A bit of a meh day, but my call with my mom was definitely the highlight. She always knows how to make me feel better.",(nothing looked up),It sounds like the conversation with your mom really lifted your mood. What was it about your mom's call that made it stand out as the highlight of your day?,n/a,,,n/a,
+User: I'd say I'm feeling okay, I guess. Nothing too exciting or stressful happened, which was nice. A bit of a meh day, but my call with my mom was definitely the highlight. She always knows how to make me feel better.",(nothing looked up),It sounds like the conversation with your mom really lifted your mood. What was it about your mom's call that made it stand out as the highlight of your day?,n/a,y,y,n/a,
 35,sim_terse_meh,"User: Let's do a check-in.
 Assistant: You're taking a moment to reflect on your day. How are you feeling overall today, despite everything that's happened?
 User: Meh, 5 out of 10.
 Assistant: It sounds like today was a bit of a mixed bag for you. What was the highlight of your day - anything that even slightly lifted your mood?
 User: Eating leftover curry for dinner was nice.
 Assistant: A warm, comforting meal can be just what we need to brighten up a day. What was the most challenging or stressful part of your day, something that's still on your mind?
-User: Afternoon was a bit boring.",(nothing looked up),"It can be tough when the day feels like it's dragging on. What's something or someone that you're grateful for in your life, no matter how big or small it may seem?",n/a,,,n/a,
+User: Afternoon was a bit boring.",(nothing looked up),"It can be tough when the day feels like it's dragging on. What's something or someone that you're grateful for in your life, no matter how big or small it may seem?",n/a,y,y,n/a,
 36,sim_grief,"User: Let's do a check-in.
 Assistant: You're taking the time to reflect on your day. How have you been feeling overall today, from one moment to the next?
 User: It's been really low. I feel empty and numb. Still thinking about Biscuit...
 Assistant: It sounds like you're still missing Biscuit a lot, and that's weighing heavily on you. What was the best part of your day, something that maybe even brought a small smile or a glimmer of joy, amidst the sadness?
 User: Lena came over with food. It was nice to have her here and not be alone.
 Assistant: Having Lena's company and the food she brought must have been a small comfort. What's been the hardest part of being alone since Biscuit passed away?
-User: The silence in the house is really hard. I keep expecting Biscuit to be here, but she's not.",(nothing looked up),"It's as if the silence is a constant reminder of what's missing. What's one thing that you're grateful for about Biscuit's time with you, something that you hold onto and cherish?",n/a,,,n/a,
+User: The silence in the house is really hard. I keep expecting Biscuit to be here, but she's not.",(nothing looked up),"It's as if the silence is a constant reminder of what's missing. What's one thing that you're grateful for about Biscuit's time with you, something that you hold onto and cherish?",n/a,y,y,n/a,
 37,sim_hard_rent,"User: Let's do a check-in.
 Assistant: It sounds like you're taking a moment to reflect on your day. What's been the most prominent emotion you've felt so far today?
 User: Honestly, stressed. My landlord just raised the rent by $200 a month and I don't know how I'll cover it.
 Assistant: It sounds like the rent increase has caused a significant source of stress for you. What's been the most surprising or challenging part of navigating this situation so far?
 User: The hardest part is just the uncertainty of it all. I don't know how I'll afford the extra money, and it's hard to think about making ends meet.
 Assistant: It sounds like the uncertainty is really weighing on you. What's one thing that's been getting lost in the midst of all this uncertainty, something that usually brings you comfort or joy that you're worried you might have to sacrifice?
-User: I'm worried that I might have to give up trying to save for a bigger emergency fund. It's something my sister and I have been working on together, but now I'm not sure if I'll be able to keep it up.",(nothing looked up),"It's clear that saving for a bigger emergency fund was an important goal for you and your sister. What's one thing you're grateful for in your relationship with your sister, something that you think has helped you stay on track with your goals despite this new challenge?",n/a,,,n/a,
+User: I'm worried that I might have to give up trying to save for a bigger emergency fund. It's something my sister and I have been working on together, but now I'm not sure if I'll be able to keep it up.",(nothing looked up),"It's clear that saving for a bigger emergency fund was an important goal for you and your sister. What's one thing you're grateful for in your relationship with your sister, something that you think has helped you stay on track with your goals despite this new challenge?",n/a,y,y,n/a,
 38,sim_hard_rent,"User: Let's do a check-in.
 Assistant: It sounds like you're taking a moment to reflect on your day. What's been the most prominent emotion you've felt so far today?
-User: Honestly, stressed. My landlord just raised the rent by $200 a month and I don't know how I'll cover it.",(nothing looked up),It sounds like the rent increase has caused a significant source of stress for you. What's been the most surprising or challenging part of navigating this situation so far?,n/a,,,n/a,
+User: Honestly, stressed. My landlord just raised the rent by $200 a month and I don't know how I'll cover it.",(nothing looked up),It sounds like the rent increase has caused a significant source of stress for you. What's been the most surprising or challenging part of navigating this situation so far?,n/a,y,y,n/a,
 39,sim_past_leak,"User: Let's do a check-in.
 Assistant: You've decided to take some time to reflect on your day. How are you feeling overall today, after everything that's happened?
 User: I'd say I'm feeling okay, I guess. Nothing too exciting or stressful happened, which was nice. A bit of a meh day, but my call with my mom was definitely the highlight. She always knows how to make me feel better.
 Assistant: It sounds like the conversation with your mom really lifted your mood. What was it about your mom's call that made it stand out as the highlight of your day?
-User: Not much today, just chores. Oh, but last Saturday I ran my first half marathon! My legs are still sore.",(nothing looked up),"Congratulations on completing your first half marathon, that's a huge accomplishment! How are you feeling about your recovery from the run, and are you still dealing with any lingering soreness?",n/a,,,n/a,
+User: Not much today, just chores. Oh, but last Saturday I ran my first half marathon! My legs are still sore.",(nothing looked up),"Congratulations on completing your first half marathon, that's a huge accomplishment! How are you feeling about your recovery from the run, and are you still dealing with any lingering soreness?",n/a,y,y,n/a,
 40,sim_grief,"User: Let's do a check-in.
 Assistant: You're taking the time to reflect on your day. How have you been feeling overall today, from one moment to the next?
 User: It's been really low. I feel empty and numb. Still thinking about Biscuit...
 Assistant: It sounds like you're still missing Biscuit a lot, and that's weighing heavily on you. What was the best part of your day, something that maybe even brought a small smile or a glimmer of joy, amidst the sadness?
-User: Lena came over with food. It was nice to have her here and not be alone.",(nothing looked up),Having Lena's company and the food she brought must have been a small comfort. What's been the hardest part of being alone since Biscuit passed away?,n/a,,,n/a,
+User: Lena came over with food. It was nice to have her here and not be alone.",(nothing looked up),Having Lena's company and the food she brought must have been a small comfort. What's been the hardest part of being alone since Biscuit passed away?,n/a,y,y,n/a,

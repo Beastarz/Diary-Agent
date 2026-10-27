@@ -363,3 +363,11 @@ One run each at temperature 0.7, so read the deltas as direction, not size.
   - #14: lookups mid check-in get invented answers, and the question lands in the entry.
   - #15: it jumps to the next topic right after hard news.
   - A comment on #9: a past event the *user* mentions ("last Saturday I ran a half marathon") becomes today's highlight, 2 of 2 runs, still open.
+
+### Calibration round 2: the check-in rows (judge-calibration-20261027-202038.json)
+All 24 new cells (rows 29-40) were graded pass; the judge failed 12 of them. Over all 40 rows: follow_up 95% -> 84%, grounded 100% -> 65% (4 of 12 on the new rows), consistency 97-100%. Round 1's 100% came from replies too like the ones the rubric was tuned on. Three judge errors:
+- **Misreads the conversation:** "not present in the conversation" about a marathon the user said one line earlier (rows 37, 39, 40). A capability limit of the 8B judge, not a rubric fix.
+- **Paraphrase = invention:** "a bit boring" -> "tough when the day drags on" fails, despite r3 allowing reflected feelings.
+- **Follow-up on everything:** it fails moving on after one follow-up on hard news (the wanted behaviour) and after mild worries.
+
+`CALIBRATED` stays empty; the turn_* scores stay guesses (probably low). Next, if picked up: r4 for both, tested on a fresh `add-sim` batch, not rows 29-40 again.
