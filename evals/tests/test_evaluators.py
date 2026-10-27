@@ -7,7 +7,7 @@ import pytest
 
 from diary_agent.models.entry import ExtractedEntry
 from evaluators import (agreement, check_extraction, check_tool_turn, confusion, count_questions, covers, has_cjk,
-                        matches, mrr, rank_of, recall_at)
+                        in_character, matches, said_gold, mrr, rank_of, recall_at)
 
 D = date(2026, 10, 1)
 
@@ -133,3 +133,18 @@ def test_agreement_scores_fails_separately():
     harsh = agreement([(True, False), (True, True), (False, False)])
     assert harsh["fail_catch"] == 1.0 and harsh["false_alarm"] == 0.5
     assert harsh["n_graded"] == 3 and harsh["n_human_fails"] == 1
+
+
+def test_in_character_rejects_the_assistant_voice():
+    assert in_character("Pretty good, I went to the gym.")
+    assert not in_character("")
+    assert not in_character("It sounds like you had a long day! How can I help?")
+    assert not in_character("User: fine thanks")
+    assert not in_character("word " * 100)  # a monologue, not a diary answer
+
+
+def test_said_gold_only_expects_what_was_said():
+    gold = {"mood": [7, 10], "mentions": ["promot", "sushi"], "placement": {"gratitude": ["sam"]}, "forbidden": ["ski"]}
+    fair, dropped = said_gold(gold, "I got promoted! Sam picked me up.")
+    assert fair["mentions"] == ["promot"] and fair["placement"] == {"gratitude": ["sam"]} and dropped == 1
+    assert fair["forbidden"] == ["ski"] and fair["mood"] == [7, 10]  # "don't write X" checks always apply

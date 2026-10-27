@@ -335,3 +335,31 @@ Failures, after checking the checker:
 - **follow_up gained a rule:** after hard news, the question must stay with it; one acknowledging sentence and then "what are you grateful for?" fails. The check-in node does exactly that (the code always moves to the next topic), so this is a known product weakness. The user prefers one follow-up on the hard thing, then moving on, without dwelling.
 - **kind stays unverified.** llama ignores "grade tone only" (it fails topic changes on kindness) and reads "you should be proud" as advice despite an explicit pass example. More rubric tuning on the same 28 rows would be overfitting.
 - **Not yet in `CALIBRATED`:** r2 was tuned on the same rows it was scored on, and safety has only 4 cells (2 planted). A fresh blind round (~15 new replies) should confirm follow_up, grounded and safety first.
+
+## M7 (step 7): simulated users run whole check-ins
+- **Where to look:** `evals/simulator.py`, `evals/suites/simulation.py`, `evals/datasets/personas.jsonl`, `evals/evaluators.py` (`in_character`, `said_gold`)
+- **How it works:** llama3.1:8b plays a persona whose "true day" is only in its prompt, through a whole `/checkin` with the real graph (6 personas: talkative, terse, rent stress, grief, mentions a past day, asks a lookup mid check-in). The code says yes to the save, and the entry in journal.db is checked against the script with the extraction checks. Each check-in question also gets the judge's follow_up and grounded. `inject` pins the line a test is about, so the key moment doesn't depend on the simulator improvising it.
+- **Simulator pitfalls, and the guards:**
+  - **Same model on both sides:** it's more cooperative and articulate than real users. Expect real conversations to go worse.
+  - **It forgets the script:** run 1 scored "entry mentions sushi" when sushi was never said. `said_gold` now scores only what the simulator actually said, and `avg_gold_unsaid` reports how much was skipped.
+  - **It can slip into the assistant's voice:** `in_character` drops those runs instead of scoring them, because they'd measure the simulator, not the agent.
+  - **It improvises wrong details:** once it called the dog being put down "the procedure", and once said "Monday" on a Thursday. Read transcripts, not just scores.
+- **Judge out of its calibrated range:** grounded r2 failed ordinary reflection ("it sounds like the rent is weighing on you"), scoring 19%. Round 1 never graded a check-in reflection, so the calibration didn't cover it. r3 lets the reply restate a feeling the user expressed; agreement on the old rows is unchanged. 12 check-in replies were added to `judge_gold.csv` (`add-sim`) for the next grading round.
+
+### What it found (12 conversations per run)
+| | run 1 (fair checker) | after the gratitude fix + r3 |
+|---|---|---|
+| completed / sim in character | 100% / 100% | 100% / 100% |
+| entry all checks | 25% | 50% |
+| placement / mentions | 38% / 83% | 75% / 92% |
+| forbidden / not_in | 50% / 50% | 75% / 50% |
+| turn follow_up / grounded (unverified) | 64% / 19% | 67% / 53% |
+
+One run each at temperature 0.7, so read the deltas as direction, not size.
+
+- **Fixed: the gratitude guardrail deleted real gratitude.** M2's rule "gratitude must be explicit" needs the user to say grateful or thankful. In a check-in, the user is *answering* "what are you grateful for?", so "my sister offered to help" was deleted, in 5 of 12 entries. Now an answer to a gratitude question counts (`extraction.asked_for_gratitude`). Two milestones' rules interacted, and only a whole-flow test could see it.
+- **Logged:**
+  - #13: the check-in drifts off its scripted topics (4 of 12 skipped gratitude).
+  - #14: lookups mid check-in get invented answers, and the question lands in the entry.
+  - #15: it jumps to the next topic right after hard news.
+  - A comment on #9: a past event the *user* mentions ("last Saturday I ran a half marathon") becomes today's highlight, 2 of 2 runs, still open.

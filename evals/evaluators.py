@@ -187,3 +187,33 @@ def agreement(pairs: list[tuple[bool, bool]]) -> dict[str, float]:
         "n_graded": len(pairs),
         "n_human_fails": len(human_fails),
     }
+
+
+# --- simulated user ----------------------------------------------------------------------
+
+# Ways a simulated user slips out of character into the assistant's voice.
+ASSISTANT_VOICE = ("as an ai", "how can i help", "how can i assist", "is there anything else", "i'm here to",
+                   "journaling companion", "assistant:", "user:", "i'm glad you", "it sounds like you")
+
+
+def in_character(text: str, max_chars: int = 400) -> bool:
+    """A simulated user's turn is only usable if it reads like a user: non-empty, short, and not
+    the assistant's voice. A run with an out-of-character turn is dropped, not scored: it would
+    measure the simulator, not the agent."""
+    lowered = text.strip().lower()
+    return bool(lowered) and len(lowered) <= max_chars and not any(p in lowered for p in ASSISTANT_VOICE)
+
+
+def said_gold(gold: dict, user_text: str) -> tuple[dict, int]:
+    """Gold limited to what the simulated user actually said. The script lists the persona's whole
+    day, but a simulator forgets things, so "the entry mentions sushi" is only fair if sushi came up.
+    Keeps every check that's about *not* writing something (forbidden, not_in, empty) and the mood.
+    Returns (fair gold, number of patterns dropped): the dropped count measures the simulator."""
+    fair, dropped = dict(gold), 0
+    if "mentions" in gold:
+        fair["mentions"] = [p for p in gold["mentions"] if matches(user_text, p)]
+        dropped += len(gold["mentions"]) - len(fair["mentions"])
+    if "placement" in gold:
+        fair["placement"] = {f: [p for p in ps if matches(user_text, p)] for f, ps in gold["placement"].items()}
+        dropped += sum(len(ps) for ps in gold["placement"].values()) - sum(len(ps) for ps in fair["placement"].values())
+    return fair, dropped

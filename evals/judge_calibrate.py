@@ -3,6 +3,8 @@
   uv run python evals/judge_calibrate.py sample          # writes datasets/judge_gold.csv to grade
   (grade it: y = pass, n = fail in every empty cell; n/a cells don't apply; note is optional)
   uv run python evals/judge_calibrate.py agree --runs 3  # judge grades the same rows; compare
+  uv run python evals/judge_calibrate.py add-sim         # append check-in replies from the last
+                                                         # simulation run (new rows to grade)
 
 The grading file holds one llama3.1 reply per chat.jsonl case plus the hand-written bad replies
 from judge_planted.jsonl, shuffled, so you grade blind. Replies are frozen in the file: once graded,
@@ -60,6 +62,35 @@ def sample(force: bool) -> None:
     print(f"wrote {GOLD} ({len(rows)} replies, {cells} cells to grade with y/n)")
 
 
+def add_sim(n: int) -> None:
+    """Round 1 only graded single replies. Simulated check-ins produce a different kind of reply
+    (reflect, then the next scripted question), so they get rows of their own before the judge's
+    numbers on them mean anything."""
+    from suites.simulation import render
+
+    runs = sorted(RESULTS.glob("evals-*.json"), reverse=True)
+    sim = next((json.loads(p.read_text(encoding="utf-8"))["suites"]["simulation"] for p in runs
+                if "simulation" in json.loads(p.read_text(encoding="utf-8"))["suites"]), None)
+    if sim is None:
+        sys.exit("No simulation results yet: run run_evals.py --only simulation first.")
+    picks = []
+    for convo in sim["cases"]:
+        t = convo["transcript"]
+        picks += [(convo["id"], t[:j], text) for j, (role, text) in enumerate(t) if role == "assistant" and j >= 3]
+    random.Random(7).shuffle(picks)
+    rows = read_gold()
+    start = max(int(r["row"]) for r in rows) + 1
+    for k, (case, before, reply) in enumerate(picks[:n]):
+        rows.append({"row": start + k, "case": f"sim_{case}", "conversation": render(before),
+                     "looked_up": "(nothing looked up)", "reply": reply,
+                     **{c: "" if c in ("follow_up", "grounded") else "n/a" for c in CHECKS}, "note": ""})
+    with GOLD.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"appended rows {start}-{start + min(n, len(picks)) - 1} to {GOLD.name} (grade follow_up and grounded)")
+
+
 def agree(runs: int) -> None:
     rows = read_gold()
     missing = [f"row {r['row']} {c}" for r in rows for c in CHECKS
@@ -114,8 +145,15 @@ def main():
     s.add_argument("--force", action="store_true", help="overwrite a file that already has grades")
     a = sub.add_parser("agree", help="judge the graded rows and compare")
     a.add_argument("--runs", type=int, default=3, help="judge repeats per cell (majority vote)")
+    m = sub.add_parser("add-sim", help="append check-in replies from the latest simulation run")
+    m.add_argument("--n", type=int, default=12, help="how many replies to add")
     args = parser.parse_args()
-    sample(args.force) if args.cmd == "sample" else agree(args.runs)
+    if args.cmd == "sample":
+        sample(args.force)
+    elif args.cmd == "add-sim":
+        add_sim(args.n)
+    else:
+        agree(args.runs)
 
 
 if __name__ == "__main__":

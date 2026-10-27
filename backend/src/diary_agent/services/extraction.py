@@ -24,11 +24,20 @@ class ExtractionError(Exception):
 GRATITUDE_WORDS = ("grateful", "thankful", "thank", "appreciat", "blessed")
 
 
+def asked_for_gratitude(lines: list[str]) -> bool:
+    """Did the user answer a gratitude question? "My sister offered to help" is explicit gratitude
+    when it answers "What are you grateful for?". Without this, the guardrail emptied gratitude in
+    5 of 12 simulated check-ins (M7 simulation suite)."""
+    return any(a.startswith("Assistant:") and "?" in a and any(w in a.lower() for w in GRATITUDE_WORDS)
+               and b.startswith("User:") for a, b in zip(lines, lines[1:]))
+
+
 def apply_guardrails(entry: ExtractedEntry, transcript: str) -> ExtractedEntry:
-    user_text = " ".join(line for line in transcript.splitlines() if line.startswith("User:")).lower()
+    lines = transcript.splitlines()
+    user_text = " ".join(line for line in lines if line.startswith("User:")).lower()
     updates = {}
-    # Gratitude must be explicit.
-    if entry.gratitude and not any(w in user_text for w in GRATITUDE_WORDS):
+    # Gratitude must be explicit: said by the user, or an answer to a gratitude question.
+    if entry.gratitude and not any(w in user_text for w in GRATITUDE_WORDS) and not asked_for_gratitude(lines):
         updates["gratitude"] = []
     # Mood words must be the user's own (stem match, so "relief" keeps "relieved").
     # Stops the assistant's words ("invigorating") from becoming the user's feelings.

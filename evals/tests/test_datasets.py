@@ -117,3 +117,16 @@ def test_gold_file_is_graded_with_known_values():
     for r in read_gold():
         for c in CHECKS:
             assert r[c].strip().lower() in {"", "n/a", *GRADES}, f"row {r['row']} {c}: {r[c]!r}"
+
+
+def test_personas_have_scripts_and_known_gold_keys():
+    from evaluators import in_character
+
+    rows = load_jsonl("personas.jsonl")
+    assert unique_ids(rows)
+    for r in rows:
+        assert r["style"] and r["day"], r["id"]
+        assert set(r["gold"]) <= EXTRACTION_KEYS - {"id", "transcript", "messages"}, r["id"]
+        assert set(r["gold"].get("placement", {})) <= LIST_FIELDS, r["id"]
+        for k, line in r.get("inject", {}).items():
+            assert 0 <= int(k) < 4 and in_character(line), f"{r['id']}: inject {k}"

@@ -49,6 +49,15 @@ def test_guardrail_clears_unstated_gratitude():
     assert apply_guardrails(entry, "User: so thankful for my sister").gratitude == ["sister"]
 
 
+def test_guardrail_keeps_answers_to_a_gratitude_question():
+    entry = GOOD.model_copy(update={"gratitude": ["sister"]})
+    asked = "Assistant: What's one thing you're grateful for today?\nUser: My sister offered to help me move."
+    assert apply_guardrails(entry, asked).gratitude == ["sister"]
+    # Not a question, or the user never answered it: still not explicit.
+    assert apply_guardrails(entry, "Assistant: I'm grateful you shared.\nUser: my sister helped").gratitude == []
+    assert apply_guardrails(entry, "User: my sister helped\nAssistant: What are you grateful for?").gratitude == []
+
+
 def test_guardrail_keeps_only_users_mood_words():
     entry = GOOD.model_copy(update={"mood_words": ["invigorated", "relieved"]})
     transcript = "User: went for a run, so relieved\nAssistant: that's invigorating!"

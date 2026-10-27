@@ -41,6 +41,7 @@ uv run diary summary [--week|--month] [--date YYYY-MM-DD]   # map-reduce review;
 uv run diary memory list            # what the agent remembers about you (also: add "...", forget <id>)
 uv run python evals/run_evals.py       # M7 scorecard: routing, retrieval, extraction, tools, language (--only a,b; needs Ollama)
 uv run python evals/judge_calibrate.py sample|agree   # M7 LLM judge: hand-grade file, then judge-vs-you agreement
+uv run python evals/run_evals.py --only judge,simulation   # opt-in: LLM judge, simulated-user check-ins (slow)
 uv run python evals/summary_probe.py   # summary grounding probe; --collapse forces the merge step (needs Ollama)
 uv run pytest                      # unit tests (no Ollama needed)
 uv run python scripts/smoke.py     # check Ollama connectivity

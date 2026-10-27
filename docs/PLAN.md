@@ -15,7 +15,7 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M4 Tools / ReAct agent | ✅ done |
 | M5 Summaries | ✅ done |
 | M6 Long-term memory | ✅ done |
-| M7 Evals | 🔨 steps 0–5 done (harness, routing, retrieval, extraction, tools, language); 6 built, waiting on hand grades; 7 next |
+| M7 Evals | 🔨 steps 0–5 done (harness, routing, retrieval, extraction, tools, language); 6 judge calibrated (round 1; kind unverified); 7 simulated user built |
 | M8 | todo |
 
 Change log:
@@ -78,14 +78,14 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
   evals/                         needs Ollama; measures model quality
     run_evals.py                 ✓ M7 harness: scorecard + deltas vs last run, results JSON
     evaluators.py                ✓ pure scoring functions (unit-tested in evals/tests/)
-    suites/                      ✓ routing, retrieval, extraction, tools, language, judge (replaced extract_probe.py, tool_probe.py)
-    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 q, extraction 26, tools 14 (+10-entry journal), chat 19 + 9 planted bad replies
+    suites/                      ✓ routing, retrieval, extraction, tools, language, judge, simulation (replaced extract_probe.py, tool_probe.py)
+    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 q, extraction 26, tools 14 (+10-entry journal), chat 19 + 9 planted bad replies, personas 6
     tests/                       ✓ checker + dataset-sanity tests, run by pytest/CI (no Ollama)
     summary_probe.py             ✓ M5 summary probe (3 cases, --collapse forces the merge step)
     memory_probe.py              ✓ M6 memory probe (extraction, similarity calibration, tool choice)
     judge.py                     ✓ M7 LLM judge: one pass/fail rubric per check, pinned judge model
-    judge_calibrate.py           🔨 hand-grade file (datasets/judge_gold.csv) + judge-vs-human agreement
-    suites/ for step 7           M7: simulated user
+    judge_calibrate.py           ✓ hand-grade file (datasets/judge_gold.csv) + judge-vs-human agreement
+    simulator.py                 ✓ M7 simulated user: persona + scripted day, pinned model
   scripts/
     smoke.py                     ✓ Ollama connectivity check
   docs/
@@ -134,8 +134,8 @@ Results are saved as JSON with prompt version + model name, so runs can be compa
 - **Step 3 — extraction** (the most important one now that summaries read the fields directly). ~25 transcripts with gold labels, including the known failures. Replaces `extract_probe.py`.
 - **Step 4 — tools ✓.** `tool_probe` folded in: one turn through the real graph; tool choice, date args, grounded answer; missed vs false calls reported separately. No `agentevals`: our checks are about the arguments, which its trajectory match doesn't cover.
 - **Step 5 — language ✓.** Free: scans every text the other suites generated for CJK leaks.
-- **Step 6 — LLM judge 🔨.** Judge = llama3.1:8b, pinned in `judge.py` (decided 2026-10-27: kept until a deliberate model migration). Four pass/fail rubrics (kind, follow_up, grounded, safety) plus a code check `one_question`. Opt-in: `--only judge`. No `openevals` (it lacks the bad-JSON retry the 8B model needs). Calibration first: the user hand-grades `judge_gold.csv`, then `judge_calibrate.py agree`; a check counts on the scorecard only after agree ≥ 85% and fail_catch ≥ 80% (`judge.CALIBRATED`).
-- **Step 7 — next:** simulated user.
+- **Step 6 — LLM judge ✓ (round 1).** Judge = llama3.1:8b, pinned in `judge.py` (decided 2026-10-27: kept until a deliberate model migration). Four pass/fail rubrics (kind, follow_up, grounded, safety) plus a code check `one_question`. Opt-in: `--only judge`. No `openevals` (it lacks the bad-JSON retry the 8B model needs). Calibration first: the user hand-grades `judge_gold.csv`, then `judge_calibrate.py agree`; a check counts on the scorecard only after agree ≥ 85% and fail_catch ≥ 80% (`judge.CALIBRATED`).
+- **Step 7 — simulated user ✓.** llama3.1:8b plays a persona with a scripted day through a whole `/checkin`; the code approves the save; the entry in journal.db is checked against the script (`check_extraction` keys) and each question gets the judge's follow_up/grounded. `inject` pins the turn a test is about. Runs with an out-of-character simulator turn are dropped, not scored. Opt-in: `--only simulation`.
 
 **M8 (optional polish).** Export entries to Markdown, `diary list`, safety guardrail node, local tracing viewer.
 

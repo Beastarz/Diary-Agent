@@ -1,6 +1,6 @@
 """M7 eval harness: one command, one scorecard, one results file per run.
 
-Run: uv run python evals/run_evals.py [--only routing,retrieval,extraction,tools,judge] [--runs 2]
+Run: uv run python evals/run_evals.py [--only routing,retrieval,extraction,tools,judge,simulation] [--runs 2]
 
 Suites (cheapest first):
 - routing     no LLM. Labelled messages -> the router's route, and which tools the code gate offers.
@@ -9,6 +9,7 @@ Suites (cheapest first):
 - tools       chat model. One turn through the real graph: right tool, right dates, grounded reply.
 - judge       chat model + LLM judge, opt-in (--only judge): kind, follow-up, grounded, crisis care.
               Calibrate it first: judge_calibrate.py.
+- simulation  simulated users run whole check-ins, opt-in (--only simulation): saved entry vs script.
 - language    free, automatic: scans every text the suites above generated for CJK leaks.
 
 Results go to evals/results/evals-<timestamp>.json with the model, prompt version and git commit.
@@ -24,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 SUITES = ("routing", "retrieval", "extraction", "tools")  # the default run
-OPT_IN = ("judge",)  # slow: only with --only
+OPT_IN = ("judge", "simulation")  # slow: only with --only
 RESULTS = Path(__file__).parent / "results"
 
 
