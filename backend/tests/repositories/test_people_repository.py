@@ -64,3 +64,38 @@ def test_list_get_delete(tmp_path):
     assert repo.delete_person(c, "Lucas") is True
     assert repo.delete_person(c, "Lucas") is False
     assert [p.name for p in repo.list_people(c)] == ["Mum"]
+
+
+def test_normalise_keeps_groups_and_bare_roles_whole():
+    assert repo.normalise("Mum and Dad") == "mum and dad"
+    assert repo.normalise("my best friend") == "best friend"
+
+
+def test_facts_dedupe_ignores_punctuation_and_keep_the_newest(tmp_path):
+    c = conn(tmp_path)
+    p, _ = repo.upsert_person(c, "Lucas", "friend", ["good at math"], D1)
+    p, _ = repo.upsert_person(c, "Lucas", "friend", ["Good at math."], D2)
+    assert p.facts == ["good at math"]
+    p, _ = repo.upsert_person(c, "Lucas", "friend", [f"fact {i}" for i in range(12)], D2)
+    assert len(p.facts) == repo.MAX_FACTS and p.facts[-1] == "fact 11"
+
+
+def test_remove_fact(tmp_path):
+    c = conn(tmp_path)
+    repo.upsert_person(c, "Lucas", "friend", ["good at math", "plays chess"], D1)
+    assert repo.remove_fact(c, "Lucas", "Plays chess") is True
+    assert repo.get_person(c, "Lucas").facts == ["good at math"]
+    assert repo.remove_fact(c, "Lucas", "plays chess") is False
+    assert repo.remove_fact(c, "nobody", "x") is False
+
+
+def test_prune_day_removes_people_only_that_day_created(tmp_path):
+    c = conn(tmp_path)
+    old, _ = repo.upsert_person(c, "Lucas", "friend", [], D1)
+    repo.replace_mentions(c, D1, [Mention(entry_date=D1, person_id=old.id, what_happened="met", evidence="")])
+    repo.upsert_person(c, "Lucas", "friend", [], D2)
+    new, _ = repo.upsert_person(c, "Priya", "friend", [], D2)
+    repo.replace_mentions(c, D2, [])  # the re-run found nobody
+    repo.prune_day(c, D2)
+    assert repo.get_person(c, "Priya") is None
+    assert repo.get_person(c, "Lucas").last_seen == D1  # back to the last day they were really mentioned

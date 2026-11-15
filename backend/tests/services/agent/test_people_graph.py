@@ -49,7 +49,7 @@ def test_save_notes_people(graph, ctx):
     graph.invoke({"user_input": "I met Lucas, who is good at math."}, CONFIG, context=ctx)
     state = graph.invoke({"user_input": "/save"}, CONFIG, context=ctx)
     assert pending_interrupt(graph, CONFIG) is None
-    assert state["notice"] == "Saved. Noted 1 person: Lucas (new)."
+    assert state["notice"] == "Saved. Noted 1 person: Lucas (new: good at math)."
     assert people_repo.get_person(ctx.conn, "Lucas").facts == ["good at math"]
 
 

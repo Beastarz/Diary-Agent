@@ -49,9 +49,16 @@ def normalise(name: str) -> str:
     """'  My Boss ' -> 'boss', "Lucas's" -> 'lucas', 'my husband Dev' -> 'dev'.
     The key that makes two spellings one person."""
     words = re.sub(r"'s$", "", " ".join(name.lower().split()).removeprefix("my ")).split(" ")
-    while len(words) > 1 and words[0] in ROLE_WORDS:
+    if "and" in words:  # a group ("Mum and Dad") is named as a whole
+        return " ".join(words)
+    # Strip roles only while a name is left after them: "my best friend" stays "best friend".
+    while len(words) > 1 and words[0] in ROLE_WORDS and not set(words[1:]) <= ROLE_WORDS:
         words = words[1:]
     return " ".join(words)
+
+
+def _fact_key(fact: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9']+", fact.lower()))
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
@@ -71,11 +78,11 @@ def _to_mention(row) -> Mention:
 def _merge_facts(old: list[str], new: list[str]) -> list[str]:
     merged, seen = [], set()
     for fact in [*old, *new]:
-        key = " ".join(fact.lower().split())
+        key = _fact_key(fact)  # "Good at math." == "good at math"
         if key and key not in seen:
             seen.add(key)
             merged.append(fact.strip())
-    return merged[:MAX_FACTS]
+    return merged[-MAX_FACTS:]  # over the cap, the newest facts win: they are the most current
 
 
 def upsert_person(
@@ -116,6 +123,33 @@ def replace_mentions(conn: sqlite3.Connection, day: date, mentions: list[Mention
             "INSERT OR REPLACE INTO mentions (entry_date, person_id, what_happened, evidence) "
             "VALUES (:entry_date, :person_id, :what_happened, :evidence)",
             [m.model_dump(mode="json") for m in mentions])
+
+
+def prune_day(conn: sqlite3.Connection, day: date) -> None:
+    """After replace_mentions(day): undo what an earlier run that day wrote and this one didn't.
+    People first seen that day with no mentions left are deleted; others seen last that day
+    but no longer mentioned get last_seen back to their latest remaining mention."""
+    ensure_schema(conn)
+    d = day.isoformat()
+    with conn:
+        conn.execute("DELETE FROM people WHERE first_seen = ? AND id NOT IN (SELECT person_id FROM mentions)", (d,))
+        conn.execute(
+            "UPDATE people SET last_seen = (SELECT MAX(entry_date) FROM mentions WHERE person_id = people.id) "
+            "WHERE last_seen = ? AND id NOT IN (SELECT person_id FROM mentions WHERE entry_date = ?) "
+            "AND id IN (SELECT person_id FROM mentions)", (d, d))
+
+
+def remove_fact(conn: sqlite3.Connection, name: str, fact: str) -> bool:
+    """`diary people forget <name> --fact ...`: undo one unattended fact without losing the person."""
+    person = get_person(conn, name)
+    if person is None:
+        return False
+    kept = [f for f in person.facts if _fact_key(f) != _fact_key(fact)]
+    if len(kept) == len(person.facts):
+        return False
+    with conn:
+        conn.execute("UPDATE people SET facts = ? WHERE id = ?", (json.dumps(kept), person.id))
+    return True
 
 
 def get_person(conn: sqlite3.Connection, name: str) -> Person | None:

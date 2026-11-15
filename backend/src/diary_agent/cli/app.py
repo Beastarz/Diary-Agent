@@ -319,8 +319,17 @@ def people_show(name: str = typer.Argument(..., help="As shown by 'diary people 
 
 
 @people_app.command("forget")
-def people_forget(name: str = typer.Argument(..., help="As shown by 'diary people list'.")):
-    """Delete a person and their mentions."""
+def people_forget(
+    name: str = typer.Argument(..., help="As shown by 'diary people list'."),
+    fact: str = typer.Option(None, "--fact", help="Remove only this fact and keep the person."),
+):
+    """Delete a person and their mentions, or just one fact about them (--fact)."""
+    if fact is not None:
+        if not people_repo.remove_fact(entry_repo.connect(), name, fact):
+            console.print(f"[dim]No fact '{fact}' for {name}.[/dim]")
+            raise typer.Exit(1)
+        console.print("[green]Fact forgotten.[/green]")
+        return
     if not people_repo.delete_person(entry_repo.connect(), name):
         console.print(f"[dim]Nobody called {name}.[/dim]")
         raise typer.Exit(1)

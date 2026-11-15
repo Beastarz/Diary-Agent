@@ -48,11 +48,14 @@ def test_apply_upserts_people_and_replaces_the_days_mentions(tmp_path):
     conn = entry_repo.connect(tmp_path / "journal.db")
     deps = ExtractorDeps(conn=conn, store=None, day=DAY, model_name="fake")
     report = rel.apply([mention("Lucas", facts=["good at math"]), mention("my mum", "family")], deps)
-    assert rel.describe(report) == "Noted 2 people: Lucas (new), my mum (new)."
-    report = rel.apply([mention("Lucas", what="chess")], deps)
+    assert rel.describe(report) == "Noted 2 people: Lucas (new: good at math), my mum (new)."
+    report = rel.apply([mention("Lucas", what="chess", facts=["plays chess"])], deps)
+    assert rel.describe(report) == "Noted 1 person: Lucas (+ plays chess)."
+    report = rel.apply([mention("Lucas", what="chess", facts=["plays chess"])], deps)
     assert rel.describe(report) == "Noted 1 person: Lucas."
     assert [(p.name, m.what_happened) for p, m in people_repo.mentions_on(conn, DAY)] == [("Lucas", "chess")]
-    assert people_repo.get_person(conn, "mum") is not None  # the person stays; only the day's mention went
+    # Mum was only ever noted by an earlier run today: a re-run that no longer finds her removes her.
+    assert people_repo.get_person(conn, "mum") is None
 
 
 def test_describe_is_empty_when_nothing_changed(tmp_path):
@@ -76,3 +79,10 @@ def test_people_block_matches_whole_words_only(tmp_path):
     block = rel.people_block(conn, "saw ann and lucas")
     assert "- Ann (friend): likes hiking. Last seen 2026-11-15." in block
     assert "- Lucas (friend): no details yet. Last seen 2026-11-15." in block
+
+
+def test_guardrails_check_names_without_ascii_letters_against_the_raw_text():
+    alone = "User: I took a walk alone.\nAssistant: Did 小明 come too?"
+    assert rel.apply_relationship_guardrails([mention("小明")], alone) == []
+    together = "User: I took a walk with 小明.\nAssistant: Nice!"
+    assert [m.name for m in rel.apply_relationship_guardrails([mention("小明")], together)] == ["小明"]

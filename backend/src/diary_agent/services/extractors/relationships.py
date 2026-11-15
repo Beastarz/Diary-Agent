@@ -10,8 +10,9 @@ mentions tables (code). There is no human yes/no, so the guardrails carry the we
 - A fact must be grounded: most of its words must be words the user said.
 - The same person twice in one run is merged into one mention.
 
-Writes are idempotent per day: people are upserted (facts merged, never duplicated) and the
-day's mentions are replaced as a whole, even with an empty list, so a re-run that finds nobody
+Writes are idempotent per day: people are upserted (facts merged, never duplicated), the
+day's mentions are replaced as a whole, and people only an earlier run that day created are
+pruned (prune_day). So a re-run that finds nobody
 also clears what an earlier run wrote for that day.
 
 Read path: people_block() puts known people into the chat prompt when the user names them.
@@ -61,10 +62,14 @@ def _grounded(fact: str, said: set[str]) -> bool:
 
 def apply_relationship_guardrails(mentions: list[PersonMention], transcript: str) -> list[PersonMention]:
     said = _said(transcript)
+    raw_user_text = user_text(transcript).lower()
     merged: dict[str, PersonMention] = {}
     for m in mentions:
         key = people_repo.normalise(m.name)
-        if not key or key in SELF or not all(w in said for w in words(key)):
+        name_words = words(key)
+        # No ASCII words (e.g. 小明): all([]) would pass, so check the raw text instead.
+        named = all(w in said for w in name_words) if name_words else key in raw_user_text
+        if not key or key in SELF or not named:
             continue
         facts = [f for f in m.facts if _grounded(f, said)]
         if key not in merged:
@@ -86,11 +91,18 @@ def extract(runnable: Runnable, transcript: str) -> list[PersonMention]:
 def apply(items: list[PersonMention], deps: ExtractorDeps) -> Report:
     mentions, details = [], []
     for m in items:
+        before = people_repo.get_person(deps.conn, m.name)
         person, created = people_repo.upsert_person(deps.conn, m.name, m.relation, m.facts, deps.day)
         mentions.append(Mention(entry_date=deps.day, person_id=person.id, what_happened=m.what_happened,
                                 evidence=m.evidence))
-        details.append(f"{m.name} (new)" if created else m.name)
+        # Every unattended write is named in the notice, facts included, so a wrong one gets seen.
+        added = [f for f in person.facts if before is None or f not in before.facts]
+        if created:
+            details.append(f"{m.name} (new: {', '.join(added)})" if added else f"{m.name} (new)")
+        else:
+            details.append(f"{m.name} (+ {', '.join(added)})" if added else m.name)
     people_repo.replace_mentions(deps.conn, deps.day, mentions)
+    people_repo.prune_day(deps.conn, deps.day)  # a re-run that no longer finds someone undoes them
     return Report("relationships", changed=len(items), details=details)
 
 
