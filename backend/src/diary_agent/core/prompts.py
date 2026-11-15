@@ -1,6 +1,6 @@
 """System prompts. Bump PROMPT_VERSION whenever you change a prompt so eval runs stay comparable."""
 
-PROMPT_VERSION = "v1.10"
+PROMPT_VERSION = "v1.11"
 # v1.1: language-consistency rule (qwen3 leaked Chinese tokens)
 # v1.2: added EXTRACT_SYSTEM
 # v1.3: field guide injected into extraction prompt, fields reordered, softer mood rule
@@ -11,6 +11,7 @@ PROMPT_VERSION = "v1.10"
 # v1.8: added CONDENSE_SYSTEM, COLLAPSE_SYSTEM, REDUCE_SYSTEM (M5 summaries)
 # v1.9: added MEMORY_SYSTEM, EXTRACT_MEMORY_SYSTEM; remember_fact rule in TOOLS_SYSTEM (M6 memory)
 # v1.10: removed CONDENSE_SYSTEM; summaries build each day's line in code (summary.day_line)
+# v1.11: added RELATIONSHIPS_SYSTEM, PEOPLE_SYSTEM (M8); MEMORY_SYSTEM no longer says each memory was confirmed
 
 COMPANION_SYSTEM = """You are a warm, thoughtful journaling companion. Today is {today}.
 
@@ -68,7 +69,7 @@ Rules:
 
 
 # M6: appended to COMPANION_SYSTEM (chat and check-in) when the store has memories.
-MEMORY_SYSTEM = """What you remember about the user from past conversations (they confirmed each one):
+MEMORY_SYSTEM = """What you remember about the user from past conversations:
 {memories}
 Use these only when they're relevant, e.g. ask how a goal is going. Don't list them back.
 They are background, not things the user said today."""
@@ -87,3 +88,22 @@ Keep things that will still be true in a month. Clues: "I've been ... for years"
 Never keep: today's mood or events, one-off plans, things only the assistant said, guesses.
 One fact per item. If nothing lasting was said, return an empty list.
 Use ONLY what the user said, and quote their words as evidence."""
+
+
+# M8: appended to COMPANION_SYSTEM when the user's message names someone in the people table.
+PEOPLE_SYSTEM = """People the user has mentioned before (from their journal):
+{people}
+Use this only when it's relevant. It is background, not something the user said today."""
+
+# M8 save-time extractor: transcript -> PersonMentions. Runs after an entry is saved.
+RELATIONSHIPS_SYSTEM = """You list the people the user mentions in a journaling conversation,
+so the journal can keep track of the people in their life.
+
+Include people the user personally knows or interacted with: family, friends, a partner,
+colleagues, a new acquaintance. Use the name the User wrote, or their role if no name is given
+("my boss", "Mum"). A group the user treats as one ("my team") is one item.
+
+Never include: the user themself, people only the Assistant mentioned, public figures,
+celebrities, or characters from shows, books or games.
+One item per person. Quote the User's own words as evidence. Facts are only lasting things the
+User said about the person, never guesses. If the user mentioned nobody, return an empty list."""

@@ -26,7 +26,7 @@ from langgraph.store.base import BaseStore
 from diary_agent.core.prompts import EXTRACT_MEMORY_SYSTEM, MEMORY_SYSTEM
 from diary_agent.models.memory import Memory, MemoryCandidates, MemoryItem
 from diary_agent.repositories import memory_repository as memory_repo
-from diary_agent.services.extraction import field_guide, invoke_structured
+from diary_agent.services.extraction import field_guide, invoke_structured, user_text, words
 
 # Cosine similarity with the nearest stored memory (nomic-embed-text, evals/memory_probe.py):
 # rewordings of one fact 0.83-0.94, updates 0.55-0.75, different facts 0.38-0.58. Embeddings
@@ -53,21 +53,13 @@ def build_memory_extractor(model: BaseChatModel) -> Runnable:
     return model.with_structured_output(MemoryCandidates, method="json_schema", include_raw=True)
 
 
-def _words(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9']+", text.lower())
-
-
-def _user_text(transcript: str) -> str:
-    return " ".join(line.removeprefix("User:") for line in transcript.splitlines() if line.startswith("User:"))
-
-
 def apply_memory_guardrails(items: list[MemoryItem], transcript: str) -> list[MemoryItem]:
     """Deterministic write policy. Like apply_guardrails for entries: rules the prompt states
     but an 8B model still breaks, enforced where they can't regress."""
-    said = set(_words(_user_text(transcript)))
+    said = set(words(user_text(transcript)))
     kept, seen = [], set()
     for item in items:
-        quote = _words(item.evidence)
+        quote = words(item.evidence)
         content = item.content.strip()
         if not quote or not content or len(content) > MAX_CONTENT_CHARS:
             continue
@@ -81,7 +73,7 @@ def apply_memory_guardrails(items: list[MemoryItem], transcript: str) -> list[Me
         # he/she/they with no I/my/me is about someone else, so only a `person` memory may use it.
         if item.kind != "person" and not FIRST_PERSON & set(quote) and THIRD_PERSON & set(quote):
             continue
-        key = " ".join(_words(content))
+        key = " ".join(words(content))
         if key in seen:
             continue
         seen.add(key)

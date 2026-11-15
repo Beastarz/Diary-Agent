@@ -22,6 +22,7 @@ from diary_agent.services import memory as memory_service
 from diary_agent.services.agent.state import DiaryContext, DiaryState
 from diary_agent.services.agent.tools import READ_TOOLS, TOOLS
 from diary_agent.services.extractors.base import ExtractorDeps
+from diary_agent.services.extractors.relationships import people_block
 from diary_agent.services.extractors.run import notice_from, run_all
 from diary_agent.services.extraction import ExtractionError, extract_entry, format_transcript
 
@@ -80,9 +81,14 @@ def route_after_router(state: DiaryState) -> str:
 def _companion_prompt(state: DiaryState, runtime: Runtime[DiaryContext], extra: str = "") -> list[BaseMessage]:
     ctx = runtime.context
     system = COMPANION_SYSTEM.format(today=f"{ctx.day.isoformat()} ({ctx.day:%A})")
-    # Long-term memory goes in the system prompt, never into `messages`: it is background, and
+    # Long-term memory and known people go in the system prompt, never into `messages`: it is background, and
     # anything in messages would end up in the saved transcript and the extracted entry.
-    for part in (memory_service.memory_block(runtime.store, state["user_input"]), extra):
+    blocks = (
+        memory_service.memory_block(runtime.store, state["user_input"]),
+        people_block(ctx.conn, state["user_input"]),
+        extra,
+    )
+    for part in blocks:
         if part:
             system += "\n\n" + part
     # The whole day's history is resent every turn. Fine for one day; trimming comes with M6.
