@@ -17,25 +17,19 @@
       |    |   |          v               v      draft |      | nothing to save
       |    |   |         END             END           |      | or extraction failed
       |    |   |                                       v      v
-      |    v   |                                  +---------+ END
-      |  +--------+                               | confirm |  interrupt(): the CLI asks
-      |  | tools  |  ToolNode runs the calls,     +---------+  "Save this entry?"
-      |  +--------+  results go back up             |     |
-      |      |                                  yes |     | no
-      | no   | remember_fact                        v     v
-      | tool | proposed a memory                +-------+ END
-      | calls|                                  | save  |
-      v      |                                  +-------+
-     END     |                                      |
-             |                                      v
-             |                              +---------------+
-             |                              | update_memory |  LLM: lasting facts from today
-             |                              +---------------+
-             |                         proposals |       | none
-             v                                   |       v
-      +----------------+ <-----------------------+      END
-      | confirm_memory |  interrupt(): "Remember this?" per proposal, then writes the store.
-      +----------------+  -> chat_agent (to answer the remember_fact call) or END
+      |    v   |                                  +-------+  END
+      |  +--------+                               | save  |  writes the entry: no yes/no, a later
+      |  | tools  |  ToolNode runs the calls,     +-------+  save the same day replaces it
+      |  +--------+  results go back up               |
+      |      |                                        v
+      | no   | remember_fact                 +----------------+  services/extractors: memory,
+      | tool | proposed a memory             | run_extractors |  people, ... each mines the
+      | calls|                               +----------------+  transcript and writes its own
+      v      v                                        |          records. Failures go in the notice.
+     END  +----------------+                          v
+          | confirm_memory |  interrupt():           END
+          +----------------+  "Remember this?" per proposal, then writes the store,
+                              then -> chat_agent to answer the remember_fact call.
 
 One invoke = one user turn. Multi-turn flows (the check-in) work because `mode` and
 `checkin_step` are in the checkpointed state, so the router knows where we left off.
@@ -72,10 +66,9 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None, store: BaseStor
     g.add_node("checkin", nodes.checkin)
     g.add_node("summarize", nodes.summarize)
     g.add_node("extract", nodes.extract)
-    g.add_node("confirm", nodes.confirm)  # returns Command(goto=...); its type hint declares the targets
     g.add_node("save", nodes.save)
-    g.add_node("update_memory", nodes.update_memory)
-    g.add_node("confirm_memory", nodes.confirm_memory)  # Command(goto=...), like confirm
+    g.add_node("run_extractors", nodes.run_extractors)
+    g.add_node("confirm_memory", nodes.confirm_memory)  # returns Command(goto=...); its type hint declares the targets
 
     g.add_edge(START, "router")
     g.add_conditional_edges(
@@ -85,9 +78,9 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None, store: BaseStor
     )
     g.add_conditional_edges("chat_agent", tools_condition, ["tools", END])
     g.add_conditional_edges("tools", nodes.route_after_tools, ["confirm_memory", "chat_agent"])
-    g.add_conditional_edges("extract", nodes.route_after_extract, ["confirm", END])
-    g.add_edge("save", "update_memory")
-    g.add_conditional_edges("update_memory", nodes.route_after_update_memory, ["confirm_memory", END])
+    g.add_conditional_edges("extract", nodes.route_after_extract, ["save", END])
+    g.add_edge("save", "run_extractors")
+    g.add_edge("run_extractors", END)
     for node in ("checkin", "summarize"):
         g.add_edge(node, END)
     return g.compile(checkpointer=checkpointer, store=store)
@@ -121,8 +114,8 @@ def stream_turn(
                 yield "token", chunk.content
         elif payload.get("router", {}).get("route") == "extract":
             yield "status", "Writing up your entry..."
-        elif "save" in payload and graph.store is not None:
-            yield "status", "Looking for things to remember..."
+        elif "save" in payload and context.extractors:
+            yield "status", "Noting people and things to remember..."
         elif any(c["name"] != "remember_fact" for m in (payload.get("chat_agent") or {}).get("messages", [])
                  for c in getattr(m, "tool_calls", None) or []):
             yield "status", "Searching your journal..."

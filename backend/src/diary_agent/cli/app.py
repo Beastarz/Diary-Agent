@@ -18,7 +18,6 @@ from diary_agent.repositories import entry_repository as entry_repo
 from diary_agent.repositories import memory_repository as memory_repo
 from diary_agent.repositories import summary_repository as summary_repo
 from diary_agent.repositories import vector_repository as vector_repo
-from diary_agent.services import memory as memory_service
 from diary_agent.services import summary as summary_service
 from diary_agent.services.agent.graph import (
     build_graph,
@@ -29,6 +28,7 @@ from diary_agent.services.agent.graph import (
 )
 from diary_agent.services.agent.state import DiaryContext
 from diary_agent.services.extraction import ExtractionError, build_extractor, get_extraction_model
+from diary_agent.services.extractors.run import build_runnables
 
 app = typer.Typer(help="Local-first chat journal agent.", no_args_is_help=True)
 console = Console()
@@ -51,16 +51,8 @@ def render_entry(entry: ExtractedEntry, day: date) -> Panel:
     return Panel(body, title=f"{day.isoformat()} - mood {mood}", title_align="left", expand=False)
 
 
-def ask_to_save(payload: dict, day: date) -> bool:
-    """Answers the graph's interrupt(): show the draft, get a yes/no from the human."""
-    console.print(render_entry(ExtractedEntry.model_validate(payload["draft"]), day))
-    if payload["exists"] and not Confirm.ask("An entry for today already exists. Overwrite it?"):
-        return False
-    return Confirm.ask("Save this entry?")
-
-
 def ask_to_remember(payload: dict) -> list[bool]:
-    """Answers confirm_memory's interrupt(): one yes/no per proposed memory."""
+    """Answers confirm_memory's interrupt() (the remember_fact tool): one yes/no per proposal."""
     answers = []
     for p in payload["proposals"]:
         m = p["memory"]
@@ -70,10 +62,6 @@ def ask_to_remember(payload: dict) -> list[bool]:
             console.print(f"[bold]New memory[/bold] ({m['kind']}): {m['content']}")
         answers.append(Confirm.ask("Remember this?"))
     return answers
-
-
-def answer_interrupt(payload: dict, day: date) -> bool | list[bool]:
-    return ask_to_remember(payload) if "proposals" in payload else ask_to_save(payload, day)
 
 
 def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
@@ -92,11 +80,13 @@ def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
     payload = pending_interrupt(graph, config)
     if payload is not None:
         # Ctrl+C here leaves the graph paused; the next `diary chat` picks the question up again.
-        run_turn(graph, Command(resume=answer_interrupt(payload, ctx.day)), config, ctx)
+        run_turn(graph, Command(resume=ask_to_remember(payload)), config, ctx)
         return
     notice = graph.get_state(config).values.get("notice")
+    if notice and notice.startswith("Saved.") and (entry := entry_repo.get_entry(ctx.conn, ctx.day)):
+        console.print(render_entry(entry, ctx.day))  # saved without asking: show what was written
     if notice:
-        good = notice.startswith(("Saved.", "Remembered")) and "Couldn't" not in notice
+        good = notice.startswith(("Saved.", "Remembered", "Noted")) and "Couldn't" not in notice
         console.print(f"[green]{notice}[/green]" if good else f"[dim]{notice}[/dim]")
 
 
@@ -111,7 +101,7 @@ def chat():
         vectors=vector_repo.open_store(),
         day=day,
         model_name=settings.chat_model,
-        memory_extractor=memory_service.build_memory_extractor(get_extraction_model()),
+        extractors=build_runnables(get_extraction_model()),
     )
     graph = build_graph(open_checkpointer(), memory_repo.open_store())
     config = thread_config(day)
@@ -131,7 +121,7 @@ def chat():
 
     try:
         if (payload := pending_interrupt(graph, config)) is not None:
-            run_turn(graph, Command(resume=answer_interrupt(payload, day)), config, ctx)
+            run_turn(graph, Command(resume=ask_to_remember(payload)), config, ctx)
         while True:
             # lstrip BOM: PowerShell prepends U+FEFF when piping text into a program.
             user_input = console.input("[bold cyan]you[/bold cyan]: ").lstrip("﻿").strip()
