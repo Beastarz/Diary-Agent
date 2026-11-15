@@ -16,7 +16,8 @@ Decisions: **Terminal CLI**, **Ollama**, features = **guided check-in, search pa
 | M5 Summaries | ✅ done |
 | M6 Long-term memory | ✅ done |
 | M7 Evals | 🔨 steps 0–5 done (harness, routing, retrieval, extraction, tools, language); 6 judge calibrated (round 1; kind unverified); 7 simulated user built |
-| M8 | todo |
+| M8 Save-time extractors + relationships | ✅ done |
+| M9 | todo |
 
 Change log:
 - **M1:** default chat model switched from `qwen3:8b` to `llama3.1:8b`. qwen3 leaked Chinese tokens into 1–3 of every 9 English replies; llama3.1 leaked in 0 of 27 (see NOTES.md). Revisit qwen3 for tool calling in M4 using evals.
@@ -27,6 +28,7 @@ Change log:
 - **M6:** long-term memory in a `SqliteStore` (`data/store.db`, namespace `("user", "profile")`, semantic index on `content`), passed to `compile(store=...)`. Memories go into the system prompt (all of them up to 15, then goals plus the top-5 matches), never into `messages`. Two write paths, both confirmed by the user through `confirm_memory`'s `interrupt()`: `update_memory` after each save, and the `remember_fact` tool, which only stages a proposal. `diary memory list|add|forget`. `evals/memory_probe.py` drove four fixes: a less cautious extraction prompt (recall 6/12 → 5/6), a wrong-subject guardrail (the sister's move had been saved as the user's), per-tool gating so `remember_fact` is offered only for imperative "remember that…" (false saves 4/4 → 0), and rejecting 1-word tool content. It also showed that embedding similarity can't tell an update from a different fact, so the thresholds favour "add a second memory" over "overwrite" (see NOTES.md M6). Also fixed a missing newline in `REDUCE_SYSTEM` (prompt v1.9).
 - **2026-10-26:** the summary map step is now code, not an LLM call. `day_line()` builds each day from the fields the user approved (summary, highlights, challenges, gratitude, mood words); `CONDENSE_SYSTEM` was removed (prompt v1.10). Same probe results, sparse wording 2/3 → 3/3, and a month review takes 4.3 s instead of ~15 s. A stored per-entry `digest` was tried first and dropped (see NOTES.md M5).
 - **2026-10-22:** qwen3 dropped from the project (lost on CJK leaks in M1 and tool use in M4). llama3.1:8b is the only chat model; evals still take `--models` for future comparisons.
+- **M8 (2026-11-15):** one agent kept; the orchestrator / multi-agent design (`docs/superpowers/specs/2026-10-27-orchestrator-design.md`) was dropped because in this app the domains share one conversation and only diverge at save time. The post-save step became a registry of **extractors** (`services/extractors/`: contract, `EXTRACTORS` list, `run_all()` with no LangGraph imports). The save path has **no yes/no** any more (`confirm` and `update_memory` removed, `run_extractors` added), so a future scheduled end-of-day job can call it. Memory is the first extractor: it only *adds* (an overwrite is the one write `diary memory forget` can't undo) and leaves `person` items to the new **relationships** extractor, which writes `people` + `mentions` tables in journal.db (guardrail: the name must be in the user's own words). Known people reach the chat prompt by name match (`people_block`). `diary people list|show|forget`, a start-of-chat recap of what the last save wrote, and a `relationships` eval suite (24 cases). `remember_fact` keeps its confirmation. Prompt v1.11. Design: `docs/superpowers/specs/2026-11-15-extractor-chain-design.md`.
 - **Structure (2026-09-28):** moved to a full-stack layout: `backend/` (layered `core / models / repositories / services / cli / api`) + `frontend/` placeholder, with the root as a uv workspace. See Project layout below.
 
 ## Stack
@@ -57,20 +59,25 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
         entry.py                 ✓ ExtractedEntry / JournalEntry
         summary.py               ✓ PeriodSummary / SummaryRecord
         memory.py                ✓ MemoryItem / Memory
+        person.py                ✓ PersonMention (LLM) / Person, Mention (stored)
       repositories/              data access; the only place with SQL / vector DB calls
         entry_repository.py      ✓ SQLite entries (connect, save_entry, get_entry, list_entries)
         vector_repository.py     ✓ Chroma index (upsert_entry, search, count)
         summary_repository.py    ✓ SQLite summaries (save_summary, get_summary)
         memory_repository.py     ✓ SqliteStore with a semantic index (put, search, list, delete)
+        people_repository.py     ✓ SQLite people + mentions (upsert, replace_mentions, list, delete)
       services/                  business logic
         extraction.py            ✓ structured extraction + retries + guardrails
         summary.py               ✓ map-reduce summaries + context budget + guardrails
         memory.py                ✓ memory write policy (guardrails, dedupe, proposals) + prompt block
+        recap.py                 ✓ start-of-chat line: what the last save wrote
+        extractors/              ✓ M8 save-time extractors: base.py (contract), registry.py, run.py,
+                                   memory.py, relationships.py (+ people_block)
         agent/                   ✓ LangGraph agent (replaced M1's services/chat.py)
-          state.py  nodes.py  graph.py   ✓ StateGraph + checkpointer + interrupt()
+          state.py  nodes.py  graph.py   ✓ StateGraph + checkpointer; extract -> save -> run_extractors
           tools.py               ✓ @tool search_entries, get_entries_by_date, remember_fact
       cli/
-        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`, `reindex`, `summary`, `memory`
+        app.py                   ✓ `diary chat` (/checkin, /save, /cancel), `list`, `show`, `reindex`, `summary`, `memory`, `people`
       api/                       HTTP API for the frontend (FastAPI, when a UI is built)
     tests/                       no Ollama; fakes; mirrors src/
       services/  services/agent/  repositories/   ✓
@@ -78,8 +85,8 @@ diary_agent/                     uv workspace root: pyproject.toml, uv.lock, .ve
   evals/                         needs Ollama; measures model quality
     run_evals.py                 ✓ M7 harness: scorecard + deltas vs last run, results JSON
     evaluators.py                ✓ pure scoring functions (unit-tested in evals/tests/)
-    suites/                      ✓ routing, retrieval, extraction, tools, language, judge, simulation (replaced extract_probe.py, tool_probe.py)
-    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 q, extraction 26, tools 14 (+10-entry journal), chat 19 + 9 planted bad replies, personas 6
+    suites/                      ✓ routing, retrieval, extraction, relationships, tools, language, judge, simulation (replaced extract_probe.py, tool_probe.py)
+    datasets/*.jsonl             ✓ labelled cases: routing 45, retrieval 60 entries + 30 q, extraction 26, tools 14 (+10-entry journal), chat 19 + 9 planted bad replies, personas 6, relationships 24
     tests/                       ✓ checker + dataset-sanity tests, run by pytest/CI (no Ollama)
     summary_probe.py             ✓ M5 summary probe (3 cases, --collapse forces the merge step)
     memory_probe.py              ✓ M6 memory probe (extraction, similarity calibration, tool choice)
@@ -137,12 +144,15 @@ Results are saved as JSON with prompt version + model name, so runs can be compa
 - **Step 6 — LLM judge ✓ (round 1).** Judge = llama3.1:8b, pinned in `judge.py` (decided 2026-10-27: kept until a deliberate model migration). Four pass/fail rubrics (kind, follow_up, grounded, safety) plus a code check `one_question`. Opt-in: `--only judge`. No `openevals` (it lacks the bad-JSON retry the 8B model needs). Calibration first: the user hand-grades `judge_gold.csv`, then `judge_calibrate.py agree`; a check counts on the scorecard only after agree ≥ 85% and fail_catch ≥ 80% (`judge.CALIBRATED`).
 - **Step 7 — simulated user ✓.** llama3.1:8b plays a persona with a scripted day through a whole `/checkin`; the code approves the save; the entry in journal.db is checked against the script (`check_extraction` keys) and each question gets the judge's follow_up/grounded. `inject` pins the turn a test is about. Runs with an out-of-character simulator turn are dropped, not scored. Opt-in: `--only simulation`.
 
-**M8 (optional polish).** Export entries to Markdown, `diary list`, safety guardrail node, local tracing viewer.
+**M8 — Save-time extractors and relationships. ✅** One agent, no orchestrator. After a save, a registry of extractors mines the day's transcript, each writing its own records with no human yes/no: memory (adds only) and relationships (`people` + `mentions` tables). Known people go into the chat prompt by name. `diary people`, a start-of-chat recap, and a `relationships` eval suite.
+*Learn:* the registry pattern as a lighter alternative to multi-agent, idempotent writes, and what replaces a human gate when you remove one (code guardrails, evals, visible notices).
+
+**M9 (optional polish).** Export entries to Markdown, `diary list`, safety guardrail node, local tracing viewer.
 
 ## Design principles (the "good agent" part)
 - Deterministic code where possible; LLM only where judgment is needed (router can start rule-based + LLM fallback).
 - Few, well-described tools with narrow arg schemas; validate tool inputs; return concise tool outputs.
-- Human confirmation before writing an entry or a memory.
+- Chat-time writes the user asked for (`remember_fact`) are confirmed; save-time writes run unattended, guarded by code and measured by evals, and every write shows in the save notice and the next session's recap.
 - Prompts versioned in `core/prompts.py` (`PROMPT_VERSION`); every eval run records versions.
 - Graceful degradation when the 8B model fails structured output (retry with error feedback, then fallback).
 - Privacy: everything in `./data/`, git-ignored.

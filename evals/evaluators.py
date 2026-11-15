@@ -217,3 +217,28 @@ def said_gold(gold: dict, user_text: str) -> tuple[dict, int]:
         fair["placement"] = {f: [p for p in ps if matches(user_text, p)] for f, ps in gold["placement"].items()}
         dropped += sum(len(ps) for ps in gold["placement"].values()) - sum(len(ps) for ps in fair["placement"].values())
     return fair, dropped
+
+
+# --- relationships -----------------------------------------------------------------------
+
+def check_relationships(case: dict, mentions: list) -> dict[str, bool]:
+    """Extracted people vs a case. Names are compared normalised ("my mum" = "Mum").
+
+      found        every expected person was extracted (misses)
+      no_invented  nobody outside the expected and "allowed" names (invented people)
+      relation     every found expected person has the expected relation   (only if people are listed)
+      facts        every expected fact pattern matches that person's facts  (only if some person lists facts)
+    Missed and invented are separate on purpose: one accuracy number hides which way the model errs.
+    """
+    from diary_agent.repositories.people_repository import normalise
+
+    got = {normalise(m.name): m for m in mentions}
+    expected = {normalise(p["name"]): p for p in case["people"]}
+    ok = expected.keys() | {normalise(n) for n in case.get("allowed", [])}
+    res = {"found": expected.keys() <= got.keys(), "no_invented": got.keys() <= ok}
+    if expected:
+        res["relation"] = all(got[k].relation == p["relation"] for k, p in expected.items() if k in got)
+    if any(p.get("facts") for p in expected.values()):
+        res["facts"] = all(matches(" ; ".join(got[k].facts), f)
+                           for k, p in expected.items() if k in got for f in p.get("facts", []))
+    return res

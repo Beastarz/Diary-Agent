@@ -39,7 +39,8 @@ uv run diary show [YYYY-MM-DD]     # one entry (--transcript to include the chat
 uv run diary reindex               # rebuild the search index from saved entries
 uv run diary summary [--week|--month] [--date YYYY-MM-DD]   # map-reduce review; --saved shows the stored one
 uv run diary memory list            # what the agent remembers about you (also: add "...", forget <id>)
-uv run python evals/run_evals.py       # M7 scorecard: routing, retrieval, extraction, tools, language (--only a,b; needs Ollama)
+uv run diary people list            # people noted from your entries (also: show <name>, forget <name>)
+uv run python evals/run_evals.py       # M7 scorecard: routing, retrieval, extraction, relationships, tools, language (--only a,b; needs Ollama)
 uv run python evals/judge_calibrate.py sample|agree   # M7 LLM judge: hand-grade file, then judge-vs-you agreement
 uv run python evals/run_evals.py --only judge,simulation   # opt-in: LLM judge, simulated-user check-ins (slow)
 uv run python evals/summary_probe.py   # summary grounding probe; --collapse forces the merge step (needs Ollama)
@@ -56,5 +57,6 @@ uv run python scripts/smoke.py     # check Ollama connectivity
 - [x] M5 Weekly/monthly summaries (map-reduce, `diary summary`)
 - [x] M6 Long-term memory about you (store, `remember that…`, `diary memory`)
 - [ ] M7 Evals: component, retrieval, trajectory, LLM-as-judge, simulated users
+- [x] M8 Save-time extractors + relationships (`diary people`)
 
 See [`docs/PLAN.md`](docs/PLAN.md) for the full design and [`docs/NOTES.md`](docs/NOTES.md) for what each milestone teaches. To learn the concepts by topic (LangGraph, tools, RAG, memory, evals, …), start at [`docs/learning/`](docs/learning/README.md).

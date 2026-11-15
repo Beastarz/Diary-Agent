@@ -17,6 +17,14 @@ def test_normalise():
     assert repo.normalise("Aunt  May") == "aunt may"
 
 
+def test_normalise_drops_a_role_before_a_name():
+    # The model writes "my husband Dev" one day and "Dev" the next: one person, not two (relationships eval).
+    assert repo.normalise("my husband Dev") == "dev"
+    assert repo.normalise("my best friend Zara") == "zara"
+    assert repo.normalise("my mum") == "mum"  # a role alone stays the key
+    assert repo.normalise("my aunt May") == "aunt may"  # "Aunt May" is how she's named
+
+
 def test_upsert_creates_then_merges(tmp_path):
     c = conn(tmp_path)
     p, created = repo.upsert_person(c, "Lucas", "friend", ["good at math"], D1)

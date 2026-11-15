@@ -38,10 +38,20 @@ CREATE TABLE IF NOT EXISTS mentions (
 PERSON_COLS = ("id", "key", "name", "relation", "facts", "first_seen", "last_seen", "updated_at")
 
 
+# A role in front of a name: "my husband Dev" is Dev. Family titles that are part of how someone is
+# named ("Aunt May", "Grandpa Joe") are not here, so they stay in the key.
+ROLE_WORDS = {"husband", "wife", "partner", "boyfriend", "girlfriend", "fiance", "fiancee", "brother", "sister",
+              "son", "daughter", "cousin", "friend", "best", "colleague", "coworker", "boss", "manager",
+              "neighbour", "neighbor", "mum", "mom", "dad", "mother", "father", "flatmate", "roommate"}
+
+
 def normalise(name: str) -> str:
-    """'  My Boss ' -> 'boss', "Lucas's" -> 'lucas'. The key that makes two spellings one person."""
-    key = " ".join(name.lower().split()).removeprefix("my ")
-    return re.sub(r"'s$", "", key)
+    """'  My Boss ' -> 'boss', "Lucas's" -> 'lucas', 'my husband Dev' -> 'dev'.
+    The key that makes two spellings one person."""
+    words = re.sub(r"'s$", "", " ".join(name.lower().split()).removeprefix("my ")).split(" ")
+    while len(words) > 1 and words[0] in ROLE_WORDS:
+        words = words[1:]
+    return " ".join(words)
 
 
 def ensure_schema(conn: sqlite3.Connection) -> None:

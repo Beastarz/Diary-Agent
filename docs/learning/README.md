@@ -37,13 +37,14 @@ diary chat ──► LangGraph StateGraph (one run per user message)
    START → router (rule-based)
      ├─ chat_agent ⇄ tools        ReAct loop: search_entries, get_entries_by_date, remember_fact
      ├─ checkin                   guided questions; the code picks the topic, the model words it
-     └─ extract → confirm ──(you say yes)──► save → update_memory → confirm_memory
-                   interrupt()                SQLite + Chroma   LLM      interrupt(), then the store
+     └─ extract → save → run_extractors [memory, relationships]   no yes/no: each extractor
+                   SQLite + Chroma   LLM per extractor, code writes  writes its own records
+   remember_fact (tool) → confirm_memory                              interrupt(), then the store
 
 diary summary --week|--month ──► day lines (code) → [collapse] → reduce (LLM) → you confirm → save
 ```
 
-Storage (all in `data/`, git-ignored): `journal.db` (entries + summaries), `checkpoints.db` (today's conversation), `chroma/` (entry vectors), `store.db` (long-term memory).
+Storage (all in `data/`, git-ignored): `journal.db` (entries + summaries), `checkpoints.db` (today's conversation), `chroma/` (entry vectors), `store.db` (long-term memory). `journal.db` also holds the `people` and `mentions` tables (M8).
 
 ## Conventions
 

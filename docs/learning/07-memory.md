@@ -2,7 +2,7 @@
 
 How the agent remembers lasting facts about you across days, and why writing memories is much riskier than reading them.
 
-**Where to look:** [`repositories/memory_repository.py`](../../backend/src/diary_agent/repositories/memory_repository.py), [`services/memory.py`](../../backend/src/diary_agent/services/memory.py), [`models/memory.py`](../../backend/src/diary_agent/models/memory.py), [`services/agent/nodes.py`](../../backend/src/diary_agent/services/agent/nodes.py) (`update_memory`, `confirm_memory`, `_companion_prompt`), [`evals/memory_probe.py`](../../evals/memory_probe.py)
+**Where to look:** [`repositories/memory_repository.py`](../../backend/src/diary_agent/repositories/memory_repository.py), [`services/memory.py`](../../backend/src/diary_agent/services/memory.py), [`models/memory.py`](../../backend/src/diary_agent/models/memory.py), [`services/agent/nodes.py`](../../backend/src/diary_agent/services/agent/nodes.py) (`run_extractors`, `confirm_memory`, `_companion_prompt`), [`services/extractors/memory.py`](../../backend/src/diary_agent/services/extractors/memory.py), [`evals/memory_probe.py`](../../evals/memory_probe.py)
 
 ---
 
@@ -25,14 +25,14 @@ How the agent remembers lasting facts about you across days, and why writing mem
 - **In this repo:** `services/memory.py → memory_block()` is added to the system prompt in `_companion_prompt()`. With 15 memories or fewer (`MAX_INJECTED`), all of them go in. Past that, it's goals plus the top-5 matches for this turn with similarity ≥ 0.5.
 - **Why it matters:** Anything in `messages` ends up in the saved transcript, and then in the extracted entry. A small profile also costs nothing extra: one SQL read, and an embedding call only when the profile is large.
 
-### 4. Two write paths, one human gate
-- **Concept:** Memories are written either implicitly (mined from the conversation) or explicitly (the user asks). Both only *propose*; a human confirms.
-- **In this repo:** `update_memory` runs after `save` and extracts `MemoryCandidates` from the day's transcript. `remember_fact` runs when the user says "remember that…" and stages a proposal ([note 4](04-tools-and-agents.md), point 8). `confirm_memory` interrupts once per proposal ("Remember this?") and writes only what you approve. You can also manage memories by hand with `diary memory list|add|forget`.
-- **Why it matters:** One pipeline, one approval step, no matter where the memory came from.
+### 4. Two write paths, one gate left
+- **Concept:** Memories are written either implicitly (mined from the conversation) or explicitly (the user asks). Until M8 both only *proposed* and a human confirmed. M8 removed the gate from the implicit path so it can run unattended, and kept it where the user asked by name.
+- **In this repo:** After a save, the memory extractor (`services/extractors/memory.py`) mines the day's transcript and writes without asking. To stay safe it only ever *adds* (`memory.as_additions`): an overwrite is the one write `diary memory forget` can't undo. It also leaves `person` items to the relationships extractor. `remember_fact` still stages a proposal and `confirm_memory` asks "Remember this?" ([note 4](04-tools-and-agents.md), point 8). You can manage memories by hand with `diary memory list|add|forget`.
+- **Why it matters:** Removing a human gate is a trade. What replaces it here: code guardrails, the memory probe, the save notice ("Remembered 2 things"), and the next session's recap line, so a wrong memory is seen within a day.
 
 ### 5. Memory pollution is worse than a bad entry
 - **Concept:** A wrong entry is one bad row. A wrong memory is injected into **every future prompt** and shapes every future reply.
-- **In this repo:** This is why every write is confirmed and the guardrails lean toward dropping candidates. Aim for precision before recall.
+- **In this repo:** This is why the guardrails lean toward dropping candidates, why the unattended path never overwrites, and why `diary chat` opens with a recap of what the last save remembered. Aim for precision before recall.
 - **Why it matters:** The assistant will confidently "know" something false about you indefinitely, and you may not notice.
 
 ### 6. A write policy in code
@@ -56,13 +56,13 @@ How the agent remembers lasting facts about you across days, and why writing mem
 
 ### 9. Memory must never break the main job
 - **Concept:** Memory is a secondary feature. If it fails, the core action (saving the entry) must still succeed.
-- **In this repo:** `update_memory` catches failures and adds "(Couldn't check for things to remember.)" to the notice. `put_memory` stores the memory without a vector if embedding fails. `propose` treats an embedding failure as "no match".
+- **In this repo:** `run_all()` catches each extractor's failure and the notice says "(Couldn't check for memory.)"; the entry is already saved. `put_memory` stores the memory without a vector if embedding fails. `propose` treats an embedding failure as "no match".
 - **Why it matters:** The same "fail soft" rule as the search index in [note 5](05-rag-and-embeddings.md), point 2.
 
 ### Known limits (good exercises)
 - A changed value (moved city, new job) becomes a second memory rather than an update.
-- A declined candidate is proposed again after the next save on the same day, because nothing remembers the "no".
-- `update_memory` only runs after a save, so a chat-only day contributes nothing unless you say "remember…".
+- The memory extractor only runs after a save, so a chat-only day contributes nothing unless you say "remember…".
+- Reruns are only *best-effort* idempotent: dedupe is by similarity, so a second save the same day can add a near-duplicate with different wording.
 
 ---
 

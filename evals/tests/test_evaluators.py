@@ -148,3 +148,20 @@ def test_said_gold_only_expects_what_was_said():
     fair, dropped = said_gold(gold, "I got promoted! Sam picked me up.")
     assert fair["mentions"] == ["promot"] and fair["placement"] == {"gratitude": ["sam"]} and dropped == 1
     assert fair["forbidden"] == ["ski"] and fair["mood"] == [7, 10]  # "don't write X" checks always apply
+
+
+def test_check_relationships():
+    from diary_agent.models.person import PersonMention
+    from evaluators import check_relationships
+
+    case = {"id": "x", "transcript": "", "people": [{"name": "Lucas", "relation": "friend", "facts": ["math"]}],
+            "allowed": ["Mum"]}
+    lucas = PersonMention(evidence="", name="lucas", relation="friend", facts=["good at math"], what_happened="")
+    mum = PersonMention(evidence="", name="my mum", relation="family", facts=[], what_happened="")
+    tom = PersonMention(evidence="", name="Tom", relation="other", facts=[], what_happened="")
+    assert check_relationships(case, [lucas, mum]) == {"found": True, "no_invented": True, "relation": True,
+                                                       "facts": True}
+    assert check_relationships(case, [tom]) == {"found": False, "no_invented": False, "relation": True,
+                                                "facts": True}
+    assert check_relationships({"id": "y", "transcript": "", "people": []}, []) == {"found": True,
+                                                                                    "no_invented": True}

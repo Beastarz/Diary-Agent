@@ -371,3 +371,44 @@ All 24 new cells (rows 29-40) were graded pass; the judge failed 12 of them. Ove
 - **Follow-up on everything:** it fails moving on after one follow-up on hard news (the wanted behaviour) and after mild worries.
 
 `CALIBRATED` stays empty; the turn_* scores stay guesses (probably low). Next, if picked up: r4 for both, tested on a fresh `add-sim` batch, not rows 29-40 again.
+
+## M8: save-time extractors and relationships
+- **Where to look:** `services/extractors/` (`base.py` contract, `registry.py`, `run.py`, `memory.py`, `relationships.py`), `repositories/people_repository.py`, `models/person.py`, `services/agent/nodes.py` (`run_extractors`, `_companion_prompt`), `services/recap.py`, `cli/app.py` (`diary people`), `evals/suites/relationships.py`, `evals/datasets/relationships.jsonl`. Design: `docs/superpowers/specs/2026-11-15-extractor-chain-design.md`.
+- **One agent, not an orchestrator.** The first design for people and expenses was a planner that split each message into jobs for separate agents (`docs/superpowers/specs/2026-10-27-orchestrator-design.md`, now superseded). In a journal the user has one conversation; the domains only diverge when the day becomes records. So the save step became the extension point instead.
+- **The extractor contract.** Five pieces: `name`, `build(model)`, `extract(runnable, transcript)` (LLM + retries + guardrails, never writes), `apply(items, deps)` (idempotent write, returns a `Report`), `describe(report)` (one sentence for the notice). `EXTRACTORS = (memory, relationships)`. `run_all()` has no LangGraph imports and never raises: one extractor failing shows up as "(Couldn't check for memory.)" and the rest still run.
+- **No yes/no on the save path.** `confirm` and `update_memory` are gone: `extract -> save -> run_extractors`. The point is a future scheduled end-of-day job with nobody at the keyboard. A second `/save` the same day replaces the entry. `remember_fact` keeps its confirmation.
+- **What replaced the human gate.** Code guardrails, an eval suite per extractor, and visibility: the CLI prints the saved entry, the notice names every write ("Saved. Remembered 1 thing. Noted 1 person: Lucas (new)."), and `diary chat` opens with a recap of the last save with the commands that undo it.
+- **Memory only adds on the unattended path.** An "update" proposal becomes a new memory (`memory.as_additions`): an overwrite is the one write `diary memory forget` can't undo, and M6 showed embeddings can't tell an update from a different fact. `person` items are dropped there; people have their own tables now.
+- **Relationships.** The model fills one flat `PersonMention` per person (evidence, name, relation, facts, what_happened); code upserts a `people` row and replaces the day's `mentions` rows. The strongest guardrail: the name must be in the *user's* words, so a name only the assistant said never becomes a person. Facts must be grounded in the user's words. Known people reach the chat prompt by whole-word name match (`people_block`), no LLM and no embeddings.
+
+### What the eval found (relationships suite, 24 cases x 3 runs)
+| | first run | after the fixes |
+|---|---|---|
+| all checks | 79% | 88% |
+| people missed / invented | 9 / 6 | 0 / 0 |
+| relation correct | 89% | 84% |
+| facts grounded | 100% | 100% |
+
+- **Fixed: "my husband Dev" and "Dev" were two people.** The model keeps the role in the name ("my brother Leo"). `normalise()` only stripped "my", so the key was "husband dev". It now drops role words in front of a name (`ROLE_WORDS`), but keeps titles that are part of how someone is named ("Aunt May"). This one caused all 9 misses and all 6 "invented" people: the same person under a longer key.
+- **Fixed: one label.** "Dr. Patel" was labelled "Patel"; the model's answer was fine.
+- **Open: relations.** "a new friend" -> acquaintance, a cousin -> colleague, a doctor -> colleague, every run. A prompt or a code rule ("friend" in the evidence -> friend) is the next thing to try.
+- **Regression check vs the baseline** (`docs/superpowers/plans/2026-11-15-baseline.md`): routing and retrieval identical; extraction identical; tools and judge within one case. Simulation's `forbidden` dropped two cases, both the lookup-mid-check-in persona (issue #14); the simulation path runs no people or memory code, so this is simulator noise (its unsaid-gold rate also rose).
+
+### Lessons
+- **Put the extension point where the domains split.** Here that's the save step, not the chat. A registry of five-piece extractors is far less machinery than a planner, a job queue and floor-holding agents, and it asks the 8B model no open-ended routing question.
+- **Removing a human gate is a trade, so name what replaces it.** Guardrails, evals, and making every write visible with its undo command.
+- **Idempotent writes make reruns safe.** People are upserted and the day's mentions replaced as a whole. Memory is only best-effort (similarity dedupe), and that's written down as a known limit.
+- **The cheapest strong guardrail is "did the user say it?".** Name-in-user-text blocks invented people and the assistant's names in one line of code.
+
+### Known limits
+- Memory reruns are best-effort idempotent: a second save with different wording can add a near-duplicate.
+- Old `person` memories from M6 were not migrated into the people tables.
+- The same person under two names ("Mum" and "my mother") is still two rows.
+- Re-extraction happens only on `/save` and the exit prompt until a scheduler exists.
+- The relationships dataset is AI-drafted after its first 7 cases and still needs the user's review.
+
+### Try this
+- `uv run python evals/run_evals.py --only relationships --runs 3`, then remove the name-in-user-text check in `apply_relationship_guardrails` and run it again: watch `n_invented` climb.
+- In `diary chat`: "I met Lucas today, a new friend who is good at math", `/save`, then tomorrow "Lucas texted me". Check `diary people show Lucas`.
+- Write a third extractor (expenses) as one module plus one registry line, and check you didn't have to touch the graph.
+

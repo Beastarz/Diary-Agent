@@ -1,4 +1,4 @@
-"""Tools the chat agent can call. None of them writes: entries go through extract -> confirm -> save,
+"""Tools the chat agent can call. None of them writes: entries go through /save (extract -> save),
 and remember_fact only *proposes* a memory; the confirm_memory node asks the user and writes it.
 
 Tool design for an 8B model:
