@@ -16,9 +16,11 @@ from diary_agent.models.memory import Memory, MemoryKind
 from diary_agent.models.summary import SummaryRecord
 from diary_agent.repositories import entry_repository as entry_repo
 from diary_agent.repositories import memory_repository as memory_repo
+from diary_agent.repositories import people_repository as people_repo
 from diary_agent.repositories import summary_repository as summary_repo
 from diary_agent.repositories import vector_repository as vector_repo
 from diary_agent.services import summary as summary_service
+from diary_agent.services.recap import recap
 from diary_agent.services.agent.graph import (
     build_graph,
     open_checkpointer,
@@ -103,12 +105,15 @@ def chat():
         model_name=settings.chat_model,
         extractors=build_runnables(get_extraction_model()),
     )
-    graph = build_graph(open_checkpointer(), memory_repo.open_store())
+    store = memory_repo.open_store()
+    graph = build_graph(open_checkpointer(), store)
     config = thread_config(day)
     console.print(
         f"[dim]model: {settings.chat_model} - /checkin guided questions, /save write the entry, "
         "/cancel stop a check-in, exit quit[/dim]"
     )
+    if summary_line := recap(ctx.conn, store):  # saves are unattended: show what the last one wrote
+        console.print(f"[dim]{summary_line}[/dim]")
 
     messages = graph.get_state(config).values.get("messages", [])
     if messages:
@@ -278,6 +283,48 @@ def memory_add(
     memory = Memory(id=memory_repo.new_id(), kind=kind, content=content, evidence=content, source_date=date.today())
     memory_repo.put_memory(memory_repo.open_store(), memory)
     console.print(f"[green]Remembered[/green] ({memory.id}).")
+
+
+people_app = typer.Typer(help="People you've mentioned in your journal.", no_args_is_help=True)
+app.add_typer(people_app, name="people")
+
+
+@people_app.command("list")
+def people_list():
+    """List the people noted from your entries."""
+    people = people_repo.list_people(entry_repo.connect())
+    if not people:
+        console.print("[dim]Nobody noted yet. Mention someone in 'diary chat' and /save.[/dim]")
+        return
+    table = Table("name", "relation", "facts", "first seen", "last seen")
+    for p in people:
+        table.add_row(p.name, p.relation, ", ".join(p.facts), p.first_seen.isoformat(), p.last_seen.isoformat())
+    console.print(table)
+
+
+@people_app.command("show")
+def people_show(name: str = typer.Argument(..., help="As shown by 'diary people list'.")):
+    """Show one person and every day they came up."""
+    conn = entry_repo.connect()
+    person = people_repo.get_person(conn, name)
+    if person is None:
+        console.print(f"[dim]Nobody called {name}.[/dim]")
+        raise typer.Exit(1)
+    facts = ", ".join(person.facts) or "no details yet"
+    console.print(f"[bold]{person.name}[/bold] ({person.relation}): {facts}")
+    table = Table("date", "what happened")
+    for m in people_repo.mentions_for(conn, person.id):
+        table.add_row(m.entry_date.isoformat(), m.what_happened)
+    console.print(table)
+
+
+@people_app.command("forget")
+def people_forget(name: str = typer.Argument(..., help="As shown by 'diary people list'.")):
+    """Delete a person and their mentions."""
+    if not people_repo.delete_person(entry_repo.connect(), name):
+        console.print(f"[dim]Nobody called {name}.[/dim]")
+        raise typer.Exit(1)
+    console.print("[green]Forgotten.[/green]")
 
 
 @app.command()
