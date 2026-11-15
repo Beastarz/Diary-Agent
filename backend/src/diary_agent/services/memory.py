@@ -1,11 +1,16 @@
 """Long-term memory: what gets written (write policy) and what gets read back (injection).
 
 Write path: transcript -> candidates (LLM) -> guardrails (code) -> proposals (code, dedupe
-against the store) -> human yes/no (graph interrupt) -> store. Two sources feed it:
-- update_memory: after an entry is saved, the day's conversation is mined for lasting facts.
-- remember_fact: the user explicitly says "remember that ...".
-Every write is confirmed by the user. A wrong memory is worse than a wrong entry: it gets
-injected into every future conversation ("memory pollution").
+against the store) -> store. Two sources feed it:
+- save time (services/extractors/memory.py): after an entry is saved, the day's conversation is
+  mined for lasting facts and written *without* a yes/no, so it can run unattended. To keep that
+  safe it only ever adds (as_additions): an overwrite is the one write `diary memory forget`
+  can't undo, and embeddings can't tell an update from a different fact (see the scores below).
+- remember_fact: the user explicitly says "remember that ...". Still confirmed by a graph
+  interrupt, and the only path that may update a memory in place.
+A wrong memory is worse than a wrong entry: it gets injected into every future conversation
+("memory pollution"). The guardrails below, the memory eval probe, and the save notice are the
+safety net now that the save path has no human gate.
 
 Read path: memory_block() turns the store into a few lines for the system prompt.
 """
@@ -124,6 +129,19 @@ def propose(
         proposals.append({"action": "add", "memory": memory.model_dump(mode="json"),
                           "replaces": None, "tool_call_id": tool_call_id})
     return proposals
+
+
+def as_additions(proposals: list[dict]) -> list[dict]:
+    """For the unattended path: an "update" becomes a new memory, so nothing is ever overwritten."""
+    return [
+        {**p, "action": "add", "memory": {**p["memory"], "id": memory_repo.new_id()}, "replaces": None}
+        if p["action"] == "update" else p
+        for p in proposals
+    ]
+
+
+def remembered(n: int) -> str:
+    return "Nothing remembered." if n == 0 else f"Remembered {n} {'thing' if n == 1 else 'things'}."
 
 
 def apply_proposals(store: BaseStore, proposals: list[dict]) -> None:

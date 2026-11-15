@@ -225,10 +225,6 @@ def route_after_update_memory(state: DiaryState) -> str:
     return "confirm_memory" if state.get("pending_memories") else END
 
 
-def _remembered(n: int) -> str:
-    return "Nothing remembered." if n == 0 else f"Remembered {n} {'thing' if n == 1 else 'things'}."
-
-
 def confirm_memory(state: DiaryState, runtime: Runtime[DiaryContext]) -> Command[Literal["chat_agent", "__end__"]]:
     """One yes/no per proposal: the resume value is a list of bools in proposal order.
 
@@ -240,7 +236,7 @@ def confirm_memory(state: DiaryState, runtime: Runtime[DiaryContext]) -> Command
     approved = [p for p, ok in zip(proposals, answers) if ok]
     memory_service.apply_proposals(runtime.store, approved)
 
-    remembered = _remembered(len(approved))
+    remembered = memory_service.remembered(len(approved))
     notice = f"{state['notice']} {remembered}" if state.get("notice") else remembered
     update: dict = {"pending_memories": None, "notice": notice}
     # From remember_fact: swap its placeholder ToolMessage for the outcome (add_messages
