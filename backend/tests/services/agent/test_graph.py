@@ -7,7 +7,6 @@ from datetime import date
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
-from langgraph.types import Command
 
 from diary_agent.models.entry import ExtractedEntry, JournalEntry
 from diary_agent.repositories import entry_repository as entry_repo
@@ -80,51 +79,42 @@ def test_commands_do_not_enter_the_conversation(graph, ctx):
     assert pending_interrupt(graph, CONFIG) is None
 
 
-def test_save_pauses_for_confirmation_then_writes(graph, ctx):
+def test_save_writes_without_asking(graph, ctx):
     say(graph, ctx, "Had a great dinner.")
-    say(graph, ctx, "/save")
-
-    payload = pending_interrupt(graph, CONFIG)
-    assert payload == {"draft": GOOD.model_dump(mode="json"), "exists": False}
-    assert entry_repo.get_entry(ctx.conn, DAY) is None  # nothing written while paused
-
-    state = graph.invoke(Command(resume=True), CONFIG, context=ctx)
+    state = say(graph, ctx, "/save")
+    assert pending_interrupt(graph, CONFIG) is None
     saved = entry_repo.get_entry(ctx.conn, DAY)
     assert saved.summary == "You ate well."
     assert saved.transcript == "User: Had a great dinner.\nAssistant: reply"
     assert state["notice"] == "Saved."
+    assert state["draft"] is None
     assert state["saved_count"] == len(state["messages"])
 
 
-def test_declining_does_not_write(graph, ctx):
+def test_second_save_replaces_the_entry(graph, ctx):
     say(graph, ctx, "Had a great dinner.")
     say(graph, ctx, "/save")
-    state = graph.invoke(Command(resume=False), CONFIG, context=ctx)
-    assert entry_repo.get_entry(ctx.conn, DAY) is None
-    assert state["notice"] == "Not saved."
-    assert state["draft"] is None
+    say(graph, ctx, "Then a walk.")
+    state = say(graph, ctx, "/save")
+    assert pending_interrupt(graph, CONFIG) is None
+    assert entry_repo.get_entry(ctx.conn, DAY).transcript.endswith("User: Then a walk.\nAssistant: reply")
+    assert len(entry_repo.list_entries(ctx.conn)) == 1
+    assert state["notice"] == "Saved."
 
 
-def test_second_save_reports_existing_entry(graph, ctx):
-    say(graph, ctx, "Had a great dinner.")
-    say(graph, ctx, "/save")
-    graph.invoke(Command(resume=True), CONFIG, context=ctx)
-    say(graph, ctx, "/save")
-    assert pending_interrupt(graph, CONFIG)["exists"] is True
-
-
-def test_checkin_asks_each_topic_then_asks_to_save(graph, ctx):
+def test_checkin_asks_each_topic_then_saves(graph, ctx):
     state = say(graph, ctx, "/checkin")
     assert state["mode"] == "checkin"
     assert state["messages"][0].content == "Let's do a check-in."
     for i in range(len(CHECKIN_TOPICS) - 1):
         state = say(graph, ctx, f"answer {i}")
-        assert pending_interrupt(graph, CONFIG) is None
+        assert entry_repo.get_entry(ctx.conn, DAY) is None
     assert state["checkin_step"] == len(CHECKIN_TOPICS)
 
-    state = say(graph, ctx, "last answer")  # answers the final question -> extract -> confirm
+    state = say(graph, ctx, "last answer")  # answers the final question -> extract -> save
     assert state["mode"] == "chat"
-    assert pending_interrupt(graph, CONFIG) is not None
+    assert pending_interrupt(graph, CONFIG) is None
+    assert entry_repo.get_entry(ctx.conn, DAY) is not None
     # One opening line + one answer per question, each with one reply, except the last answer.
     assert [m.type for m in state["messages"]].count("ai") == len(CHECKIN_TOPICS)
 
@@ -137,14 +127,13 @@ def test_cancel_leaves_checkin(graph, ctx):
     assert state["route"] == "chat"
 
 
-def test_save_through_stream_reaches_confirmation(graph, ctx):
+def test_save_through_stream_writes_the_entry(graph, ctx):
     # Regression: the CLI path (stream) runs nodes in worker threads. A default sqlite3
     # connection raised "SQLite objects created in a thread can only be used in that same thread".
     list(stream_turn(graph, {"user_input": "Had a great dinner."}, CONFIG, ctx))
     events = list(stream_turn(graph, {"user_input": "/save"}, CONFIG, ctx))
     assert ("status", "Writing up your entry...") in events
-    assert pending_interrupt(graph, CONFIG) is not None
-    list(stream_turn(graph, Command(resume=True), CONFIG, ctx))
+    assert ("status", "Noting people and things to remember...") not in events  # no extractors in ctx
     assert entry_repo.get_entry(ctx.conn, DAY) is not None
 
 
@@ -205,7 +194,6 @@ def test_saved_transcript_leaves_out_tool_traffic(graph, ctx, chat_model_cls):
     ctx = replace(ctx, chat_model=chat_model_cls(responses=script))
     say(graph, ctx, "What did I do last Wednesday?")
     say(graph, ctx, "/save")
-    graph.invoke(Command(resume=True), CONFIG, context=ctx)
     transcript = entry_repo.get_entry(ctx.conn, DAY).transcript
     # The answer retells a past day, so it's left out too (evals: past_day_leak).
     assert transcript == "User: What did I do last Wednesday?"
@@ -214,7 +202,6 @@ def test_saved_transcript_leaves_out_tool_traffic(graph, ctx, chat_model_cls):
 def test_save_indexes_the_entry_for_search(graph, ctx):
     say(graph, ctx, "Had a great dinner.")
     say(graph, ctx, "/save")
-    graph.invoke(Command(resume=True), CONFIG, context=ctx)
     assert vector_repo.search(ctx.vectors, "dinner", k=1)[0][0] == DAY
 
 
@@ -225,7 +212,6 @@ def test_save_survives_an_indexing_failure(graph, ctx):
 
     ctx = replace(ctx, vectors=BrokenStore())
     say(graph, ctx, "Had a great dinner.")
-    say(graph, ctx, "/save")
-    state = graph.invoke(Command(resume=True), CONFIG, context=ctx)
+    state = say(graph, ctx, "/save")
     assert entry_repo.get_entry(ctx.conn, DAY) is not None
     assert "diary reindex" in state["notice"]

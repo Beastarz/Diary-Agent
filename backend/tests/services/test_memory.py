@@ -133,3 +133,19 @@ def test_large_profile_sends_goals_and_relevant_only(store, monkeypatch):
     remember(store, "Hates exam season", "preference")
     picked = [m.content for m in memory_service.select_for_prompt(store, "going to the beach with my sister")]
     assert picked == ["Training for a marathon", "Sister lives near the beach"]
+
+
+# --- save-time path (extractors/memory.py) ----------------------------------------------
+
+def test_as_additions_turns_updates_into_new_memories(store):
+    old = remember(store, "Training to run a 10k", "goal")
+    [p] = memory_service.propose(store, [item("Wants to run with family", "", "goal")], DAY)
+    assert p["action"] == "update"
+    [a] = memory_service.as_additions([p])
+    assert a["action"] == "add" and a["replaces"] is None and a["memory"]["id"] != old.id
+
+
+def test_remembered_wording():
+    assert memory_service.remembered(0) == "Nothing remembered."
+    assert memory_service.remembered(1) == "Remembered 1 thing."
+    assert memory_service.remembered(2) == "Remembered 2 things."

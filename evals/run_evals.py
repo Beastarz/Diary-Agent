@@ -1,11 +1,12 @@
 """M7 eval harness: one command, one scorecard, one results file per run.
 
-Run: uv run python evals/run_evals.py [--only routing,retrieval,extraction,tools,judge,simulation] [--runs 2]
+Run: uv run python evals/run_evals.py [--only routing,retrieval,extraction,relationships,tools,judge,simulation] [--runs 2]
 
 Suites (cheapest first):
 - routing     no LLM. Labelled messages -> the router's route, and which tools the code gate offers.
 - retrieval   embeddings only. Seeded 60-entry journal + questions with known answer days.
 - extraction  chat model. Transcripts with gold labels -> extract_entry().
+- relationships chat model. Transcripts with gold people -> the save-time relationships extractor.
 - tools       chat model. One turn through the real graph: right tool, right dates, grounded reply.
 - judge       chat model + LLM judge, opt-in (--only judge): kind, follow-up, grounded, crisis care.
               Calibrate it first: judge_calibrate.py.
@@ -24,7 +25,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-SUITES = ("routing", "retrieval", "extraction", "tools")  # the default run
+SUITES = ("routing", "retrieval", "extraction", "relationships", "tools")  # the default run
 OPT_IN = ("judge", "simulation")  # slow: only with --only
 RESULTS = Path(__file__).parent / "results"
 

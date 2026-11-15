@@ -1,8 +1,8 @@
 """Graph nodes. A node is a plain function: (state, runtime) -> partial state update.
 
 Only chat_agent and checkin call the chat model. The router is deterministic, and the
-save path is extract (LLM) -> confirm (human) -> save (code) -> update_memory (LLM) ->
-confirm_memory (human + code).
+save path is extract (LLM) -> save (code) -> run_extractors (an LLM call per extractor, code
+writes). No human yes/no on that path; confirm_memory only answers the remember_fact tool.
 """
 
 import re
@@ -21,6 +21,9 @@ from diary_agent.repositories import vector_repository as vector_repo
 from diary_agent.services import memory as memory_service
 from diary_agent.services.agent.state import DiaryContext, DiaryState
 from diary_agent.services.agent.tools import READ_TOOLS, TOOLS
+from diary_agent.services.extractors.base import ExtractorDeps
+from diary_agent.services.extractors.relationships import people_block
+from diary_agent.services.extractors.run import notice_from, run_all
 from diary_agent.services.extraction import ExtractionError, extract_entry, format_transcript
 
 # The code picks the topic order; the model only words each question.
@@ -78,9 +81,14 @@ def route_after_router(state: DiaryState) -> str:
 def _companion_prompt(state: DiaryState, runtime: Runtime[DiaryContext], extra: str = "") -> list[BaseMessage]:
     ctx = runtime.context
     system = COMPANION_SYSTEM.format(today=f"{ctx.day.isoformat()} ({ctx.day:%A})")
-    # Long-term memory goes in the system prompt, never into `messages`: it is background, and
+    # Long-term memory and known people go in the system prompt, never into `messages`: it is background, and
     # anything in messages would end up in the saved transcript and the extracted entry.
-    for part in (memory_service.memory_block(runtime.store, state["user_input"]), extra):
+    blocks = (
+        memory_service.memory_block(runtime.store, state["user_input"]),
+        people_block(ctx.conn, state["user_input"]),
+        extra,
+    )
+    for part in blocks:
         if part:
             system += "\n\n" + part
     # The whole day's history is resent every turn. Fine for one day; trimming comes with M6.
@@ -168,21 +176,7 @@ def extract(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
 
 
 def route_after_extract(state: DiaryState) -> str:
-    return "confirm" if state.get("draft") else END
-
-
-def confirm(state: DiaryState, runtime: Runtime[DiaryContext]) -> Command[Literal["save", "__end__"]]:
-    """Human-in-the-loop. interrupt() pauses the graph and checkpoints it. The CLI shows the
-    payload, then resumes with Command(resume=True/False), which becomes interrupt()'s return value.
-
-    On resume the node runs again *from the top*, so everything before interrupt() must be
-    safe to repeat. A DB read is; the write lives in the next node for that reason.
-    """
-    exists = entry_repo.get_entry(runtime.context.conn, runtime.context.day) is not None
-    approved = interrupt({"draft": state["draft"], "exists": exists})
-    if approved:
-        return Command(goto="save")
-    return Command(goto=END, update={"draft": None, "notice": "Not saved."})
+    return "save" if state.get("draft") else END
 
 
 def save(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
@@ -208,39 +202,27 @@ def route_after_tools(state: DiaryState) -> str:
     return "confirm_memory" if state.get("pending_memories") else "chat_agent"
 
 
-def update_memory(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
-    """After a save: mine the day's conversation for lasting facts. Never blocks the save."""
-    extractor = runtime.context.memory_extractor
-    if runtime.store is None or extractor is None:
-        return {}
-    try:
-        items = memory_service.extract_memories(extractor, _transcript(state))
-        proposals = memory_service.propose(runtime.store, items, runtime.context.day)
-    except Exception:  # ExtractionError, Ollama down: the entry is saved, memory can wait
-        return {"notice": f"{state.get('notice') or 'Saved.'} (Couldn't check for things to remember.)"}
-    return {"pending_memories": proposals}
-
-
-def route_after_update_memory(state: DiaryState) -> str:
-    return "confirm_memory" if state.get("pending_memories") else END
-
-
-def _remembered(n: int) -> str:
-    return "Nothing remembered." if n == 0 else f"Remembered {n} {'thing' if n == 1 else 'things'}."
+def run_extractors(state: DiaryState, runtime: Runtime[DiaryContext]) -> dict:
+    """After a save: every registered extractor (memory, people, ...) mines the day's transcript
+    and writes its own records. Never blocks or undoes the save; failures show in the notice."""
+    ctx = runtime.context
+    deps = ExtractorDeps(conn=ctx.conn, store=runtime.store, day=ctx.day, model_name=ctx.model_name)
+    reports = run_all(_transcript(state), deps, ctx.extractors)
+    return {"notice": " ".join(p for p in (state.get("notice") or "Saved.", notice_from(reports)) if p)}
 
 
 def confirm_memory(state: DiaryState, runtime: Runtime[DiaryContext]) -> Command[Literal["chat_agent", "__end__"]]:
     """One yes/no per proposal: the resume value is a list of bools in proposal order.
 
-    Unlike confirm -> save, the write is in this node, *after* interrupt(). That's safe too: the
-    node re-runs from the top on resume, but only that run gets past interrupt(), so it writes once.
+    The write is in this node, *after* interrupt(). That's safe: the node re-runs from the top
+    on resume, but only that run gets past interrupt(), so it writes once.
     """
     proposals = state["pending_memories"]
     answers = interrupt({"proposals": proposals})
     approved = [p for p, ok in zip(proposals, answers) if ok]
     memory_service.apply_proposals(runtime.store, approved)
 
-    remembered = _remembered(len(approved))
+    remembered = memory_service.remembered(len(approved))
     notice = f"{state['notice']} {remembered}" if state.get("notice") else remembered
     update: dict = {"pending_memories": None, "notice": notice}
     # From remember_fact: swap its placeholder ToolMessage for the outcome (add_messages

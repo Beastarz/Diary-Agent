@@ -35,8 +35,8 @@ Extraction reads the conversation, so anything that enters `messages` can end up
 
 Still open: the assistant recalling a past day *without* a lookup (e.g. from a memory) is still extracted as today's event ([issue #9](https://github.com/Beastarz/Diary-Agent/issues/9)).
 
-### 4. A human approves every write
-Entries (`confirm` → `save`), summaries (Confirm before `save_summary`), memories (`confirm_memory`). Tools are read-only or only *propose*. The model never writes without a yes. Mechanically, that means `interrupt()` plus the rule "no side effects before `interrupt()`" ([note 3](03-langgraph.md), point 7).
+### 4. Confirm what the user asked for by name; measure what runs unattended
+Until M8 the model never wrote without a yes: entries (`confirm` → `save`), summaries, memories (`confirm_memory`). M8 removed the yes/no from the save path so it can run on a schedule. What replaced the gate: code guardrails (a person's name must be in the user's own words; memory only adds, never overwrites), an eval suite per extractor, and visibility (the save notice and the next session's recap name every write and the command that undoes it). Writes the user asked for by name (`remember_fact`) are still confirmed, because the question costs nothing there. Tools stay read-only or only *propose*. Mechanically, a gate means `interrupt()` plus the rule "no side effects before `interrupt()`" ([note 3](03-langgraph.md), point 7).
 
 ### 5. Bound everything the model controls
 Lists (`max_length`), output length (`num_predict`), tool rounds (`MAX_TOOL_ROUNDS`), collapse rounds (`MAX_COLLAPSE_ROUNDS`), memory length (120 chars), injected memories (15). Every unbounded thing eventually ran away: tags looped until the probe hung for 10 minutes.
@@ -66,6 +66,9 @@ Component tests tell you each piece works. Only the real code path, or a simulat
 ### 12. Your measuring tools need measuring too
 Keyword checkers marked correct answers as failures (M4, M5), so `evaluators.py` got unit tests. The first LLM judge agreed with a human only 38% of the time on groundedness, so no judge score counts until it's calibrated (`judge.CALIBRATED` is still empty). The simulated user forgot its own script, so `said_gold` scores only what it actually said. Every layer of measurement gets its own check.
 
+### 13. A registry beats an orchestrator when domains diverge at the edges
+The first plan for tracking people (and later expenses) was an orchestrator: a planner splitting each message into jobs for separate agents ([superseded design](../superpowers/specs/2026-10-27-orchestrator-design.md)). But in a journal the user has *one* conversation; the domains only diverge when the day is turned into records. So M8 kept one agent and made the save step a list of extractors (`services/extractors/registry.py`), each with the same five pieces: name, build, extract, apply, describe. No planner means no open-ended LLM decision on every message, which the 8B model handles poorly. Adding a domain is one module and one registry line. Put the extension point where the domains actually split.
+
 ---
 
 ### Open problems worth trying yourself
@@ -76,6 +79,7 @@ Keyword checkers marked correct answers as failures (M4, M5), so `evaluators.py`
 - **Check-in flow:** drifts off its topics (#13), invents answers to lookups (#14), moves on right after hard news (#15).
 - **Judge:** can a fresh blind batch get `grounded` and `follow_up` over the calibration bar, or does it need a stronger judge model than the agent's own?
 - **Memory:** value changes ("moved to Leeds") get added as a second memory. Would an LLM "same fact?" check work, and how would you eval it?
+- **People:** the same person under two names ("Mum" and "my mother") is two rows, and old `person` memories from M6 were not migrated. How would you merge people safely without a human?
 - **Summaries:** the overview still overgeneralises from sparse data ("great month" from 1 entry), and it stays unmeasured until the judge is calibrated.
 
 **Full story:** [PLAN.md](../PLAN.md) → "Design principles", and the "Lessons" sections of each milestone in [NOTES.md](../NOTES.md).

@@ -8,7 +8,7 @@ How the chat loop became a graph that survives restarts, pauses for human approv
 
 ### 1. A graph is nodes plus edges, and one run = one user turn
 - **Concept:** A `StateGraph` node is a plain function `(state, runtime) -> partial update`. Edges say which node runs next. Each user message triggers one graph run from `START` to `END`.
-- **In this repo:** `graph.py → build_graph()` wires `router`, `chat_agent`, `tools`, `checkin`, `extract`, `confirm`, `save`, `update_memory` and `confirm_memory`.
+- **In this repo:** `graph.py → build_graph()` wires `router`, `chat_agent`, `tools`, `checkin`, `extract`, `save`, `run_extractors` and `confirm_memory`. Until M8 there were also `confirm` ("Save this entry?") and `update_memory`; they went when the save path stopped asking, so it can run with nobody present.
 - **Why it matters:** Nodes return only the keys they change. That keeps each node small and easy to test.
 
 ### 2. State vs context: data you save vs tools you use
@@ -23,7 +23,7 @@ How the chat loop became a graph that survives restarts, pauses for human approv
 
 ### 4. Two ways to route: conditional edges and `Command`
 - **Concept:** Either a node writes a value and a conditional edge reads it, or a node returns `Command(goto=..., update=...)` to decide and update in one step.
-- **In this repo:** `router` writes `route` and `add_conditional_edges` reads it. `confirm` and `confirm_memory` return `Command`, and their return type hint (`Command[Literal["chat_agent", "__end__"]]`) declares the possible targets.
+- **In this repo:** `router` writes `route` and `add_conditional_edges` reads it. `confirm_memory` returns `Command`, and its return type hint (`Command[Literal["chat_agent", "__end__"]]`) declares the possible targets.
 - **Why it matters:** Edges keep the routing visible in `graph.py`. `Command` is handy when the decision depends on something only the node knows, like the human's answer.
 
 ### 5. Multi-turn flows without a loop
@@ -39,8 +39,8 @@ How the chat loop became a graph that survives restarts, pauses for human approv
 
 ### 7. `interrupt()` is human-in-the-loop, and the node runs twice
 - **Concept:** Calling `interrupt(payload)` saves a checkpoint and stops the graph. The app shows the payload to the human and resumes with `Command(resume=value)`, which becomes `interrupt()`'s return value. **On resume, the node reruns from the top.**
-- **In this repo:** `confirm` interrupts with the draft entry; the CLI asks "Save this entry?" and resumes with `True`/`False`. The write happens in a separate `save` node. `confirm_memory` uses the other valid pattern: it writes in the same node, but *after* `interrupt()`, which only the resumed run reaches.
-- **Why it matters:** Any side effect *before* `interrupt()` happens twice. Put reads before it and writes after it, or in the next node. Bonus: Ctrl+C at "Save this entry?" leaves the thread paused, and the next `diary chat` asks again (`pending_interrupt`).
+- **In this repo:** `confirm_memory` interrupts once per `remember_fact` proposal; the CLI asks "Remember this?" and resumes with a list of `True`/`False`. It writes in the same node, but *after* `interrupt()`, which only the resumed run reaches. The other valid pattern is to put the write in the next node; M3 to M7's `confirm` → `save` did that, until M8 removed the save confirmation.
+- **Why it matters:** Any side effect *before* `interrupt()` happens twice. Put reads before it and writes after it, or in the next node. Bonus: Ctrl+C at "Remember this?" leaves the thread paused, and the next `diary chat` asks again (`pending_interrupt`).
 
 ### 8. Keep non-conversation out of `messages`
 - **Concept:** Anything in `messages` becomes part of the transcript that later steps read. Keep commands, status text and generated reports out of it.

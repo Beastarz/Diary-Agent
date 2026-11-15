@@ -106,6 +106,7 @@ def run_extract(runs: int) -> None:
             started = time.perf_counter()
             raw = memory_service.extract_candidates(extractor, text)
             kept = memory_service.apply_memory_guardrails(raw, text)
+            save_path = [m for m in kept if m.kind != "person"]  # what extractors/memory.py writes
             found, kept_extra = score(case["expect"], [m.content for m in kept])
             _, raw_extra = score(case["expect"], [m.content for m in raw])
             totals["expected"] += len(case["expect"])
@@ -117,8 +118,10 @@ def run_extract(runs: int) -> None:
             print(f"[{'ok ' if ok else 'BAD'}] {case['id']:16} run {r + 1}: found {found}/{len(case['expect'])}, "
                   f"extra {kept_extra} (raw {raw_extra}) {time.perf_counter() - started:.1f}s")
             for m in raw:
-                mark = "kept" if m in kept else "drop"
+                mark = "save" if m in save_path else "kept" if m in kept else "drop"
                 print(f"        {mark} ({m.kind}) {m.content!r}  <- {m.evidence!r}")
+    print("(save = written by the save-time path; kept = passes the guardrails but is a person, now"
+          " left to the relationships extractor; drop = rejected by the guardrails)")
     print(f"\nrecall {totals['found']}/{totals['expected']}, pollution kept {totals['kept_extra']} "
           f"(raw {totals['raw_extra']}), guardrails dropped {totals['dropped']}")
 
@@ -147,7 +150,7 @@ def run_similarity() -> None:
 def run_tool(runs: int) -> None:
     model = get_chat_model()
     day = date.today()
-    ctx = SimpleNamespace(day=day)
+    ctx = SimpleNamespace(day=day, conn=None)  # conn=None: no people block
     hits = 0
     for text, want in TOOL_CASES:
         for r in range(runs):

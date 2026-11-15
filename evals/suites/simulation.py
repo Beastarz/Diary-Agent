@@ -1,6 +1,6 @@
 """Simulation suite: a simulated user (simulator.py) runs a full /checkin with the real graph, the
 code approves the save, and the entry that lands in journal.db is checked against the persona's
-script. The only suite that tests the whole loop: check-in -> extract -> confirm -> save.
+script. The only suite that tests the whole loop: check-in -> extract -> save.
 
 Per conversation:
 - completed:     an entry was saved within MAX_ANSWERS answers (the check-in needs 4)
@@ -38,10 +38,7 @@ def render(transcript: list[tuple[str, str]]) -> str:
 
 def converse(graph, ctx, sim, persona: dict, thread_id: str) -> dict:
     """One whole check-in. Returns the transcript (as the user saw it), the saved entry and timing."""
-    from langgraph.types import Command
-
     from diary_agent.repositories import entry_repository as entry_repo
-    from diary_agent.services.agent.graph import pending_interrupt
 
     with ctx.conn:  # each run starts with no entry for today, so a failed save can't hide behind an old one
         ctx.conn.execute("DELETE FROM entries WHERE entry_date = ?", (ctx.day.isoformat(),))
@@ -52,8 +49,8 @@ def converse(graph, ctx, sim, persona: dict, thread_id: str) -> dict:
     injected = {int(k): v for k, v in persona.get("inject", {}).items()}
     sim_turns = []
     for i in range(MAX_ANSWERS):
-        # Paused on the save question, or no new reply (extraction failed and left a notice): done.
-        if pending_interrupt(graph, config) is not None or state["messages"][-1].type != "ai":
+        # No new reply: the last answer went to extract -> save (or extraction failed). Done.
+        if state["messages"][-1].type != "ai":
             break
         transcript.append(("assistant", state["messages"][-1].content))
         answer = injected.get(i)
@@ -62,9 +59,6 @@ def converse(graph, ctx, sim, persona: dict, thread_id: str) -> dict:
             sim_turns.append(answer)
         transcript.append(("user", answer))
         state = graph.invoke({"user_input": answer}, config, context=ctx)
-    payload = pending_interrupt(graph, config)
-    if payload is not None and "draft" in payload:
-        graph.invoke(Command(resume=True), config, context=ctx)  # the human says yes
     entry = entry_repo.get_entry(ctx.conn, ctx.day)
     return {"transcript": transcript, "entry": entry, "seconds": time.perf_counter() - started, "sim_turns": sim_turns}
 

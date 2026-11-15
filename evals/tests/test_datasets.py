@@ -130,3 +130,17 @@ def test_personas_have_scripts_and_known_gold_keys():
         assert set(r["gold"].get("placement", {})) <= LIST_FIELDS, r["id"]
         for k, line in r.get("inject", {}).items():
             assert 0 <= int(k) < 4 and in_character(line), f"{r['id']}: inject {k}"
+
+
+RELATIONS = {"family", "partner", "friend", "colleague", "acquaintance", "other"}
+
+
+def test_relationship_cases_are_well_formed():
+    rows = load_jsonl("relationships.jsonl")
+    assert unique_ids(rows) and len(rows) >= 20
+    for r in rows:
+        assert set(r) <= {"id", "transcript", "people", "allowed"}, r["id"]
+        assert r["transcript"].startswith("User:"), r["id"]
+        for p in r["people"]:
+            assert p["relation"] in RELATIONS, r["id"]
+            assert p["name"].lower() in r["transcript"].lower(), f"{r['id']}: {p['name']} is not in the user's text"

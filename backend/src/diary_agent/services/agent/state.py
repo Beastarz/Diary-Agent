@@ -7,7 +7,8 @@
 """
 
 import sqlite3
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Annotated, Literal
 
@@ -53,6 +54,7 @@ class DiaryContext:
     vectors: VectorStore  # vector_repository.open_store(): entry embeddings for search
     day: date  # the entry date, and the thread_id
     model_name: str  # recorded on saved entries
-    # Long-term memory is optional: without it (or without a store on the graph) the memory
-    # nodes skip. The store itself isn't here: it's passed to compile() and arrives as runtime.store.
-    memory_extractor: Runnable | None = None
+    # Save-time extractors (services/extractors): name -> its structured-output runnable, built
+    # once at startup. Empty = only the entry is saved. The long-term store isn't here: it's
+    # passed to compile() and arrives as runtime.store.
+    extractors: Mapping[str, Runnable] = field(default_factory=dict)

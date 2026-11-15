@@ -5,6 +5,8 @@ schema, so the JSON is almost always well-formed. Pydantic can still reject it
 (e.g. mood=11), and the *content* can still be wrong - that's what evals are for.
 """
 
+import re
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
@@ -17,6 +19,15 @@ from diary_agent.core.prompts import EXTRACT_SYSTEM
 
 class ExtractionError(Exception):
     pass
+
+
+def words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", text.lower())
+
+
+def user_text(transcript: str) -> str:
+    """Only the User's lines of a format_transcript() transcript, joined."""
+    return " ".join(line.removeprefix("User:") for line in transcript.splitlines() if line.startswith("User:"))
 
 
 # Rules the schema states but the model still breaks (NOTES.md, M2). Enforcing them in code

@@ -16,10 +16,11 @@ from diary_agent.models.memory import Memory, MemoryKind
 from diary_agent.models.summary import SummaryRecord
 from diary_agent.repositories import entry_repository as entry_repo
 from diary_agent.repositories import memory_repository as memory_repo
+from diary_agent.repositories import people_repository as people_repo
 from diary_agent.repositories import summary_repository as summary_repo
 from diary_agent.repositories import vector_repository as vector_repo
-from diary_agent.services import memory as memory_service
 from diary_agent.services import summary as summary_service
+from diary_agent.services.recap import recap
 from diary_agent.services.agent.graph import (
     build_graph,
     open_checkpointer,
@@ -29,6 +30,7 @@ from diary_agent.services.agent.graph import (
 )
 from diary_agent.services.agent.state import DiaryContext
 from diary_agent.services.extraction import ExtractionError, build_extractor, get_extraction_model
+from diary_agent.services.extractors.run import build_runnables
 
 app = typer.Typer(help="Local-first chat journal agent.", no_args_is_help=True)
 console = Console()
@@ -51,16 +53,8 @@ def render_entry(entry: ExtractedEntry, day: date) -> Panel:
     return Panel(body, title=f"{day.isoformat()} - mood {mood}", title_align="left", expand=False)
 
 
-def ask_to_save(payload: dict, day: date) -> bool:
-    """Answers the graph's interrupt(): show the draft, get a yes/no from the human."""
-    console.print(render_entry(ExtractedEntry.model_validate(payload["draft"]), day))
-    if payload["exists"] and not Confirm.ask("An entry for today already exists. Overwrite it?"):
-        return False
-    return Confirm.ask("Save this entry?")
-
-
 def ask_to_remember(payload: dict) -> list[bool]:
-    """Answers confirm_memory's interrupt(): one yes/no per proposed memory."""
+    """Answers confirm_memory's interrupt() (the remember_fact tool): one yes/no per proposal."""
     answers = []
     for p in payload["proposals"]:
         m = p["memory"]
@@ -70,10 +64,6 @@ def ask_to_remember(payload: dict) -> list[bool]:
             console.print(f"[bold]New memory[/bold] ({m['kind']}): {m['content']}")
         answers.append(Confirm.ask("Remember this?"))
     return answers
-
-
-def answer_interrupt(payload: dict, day: date) -> bool | list[bool]:
-    return ask_to_remember(payload) if "proposals" in payload else ask_to_save(payload, day)
 
 
 def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
@@ -92,11 +82,13 @@ def run_turn(graph, graph_input, config: dict, ctx: DiaryContext) -> None:
     payload = pending_interrupt(graph, config)
     if payload is not None:
         # Ctrl+C here leaves the graph paused; the next `diary chat` picks the question up again.
-        run_turn(graph, Command(resume=answer_interrupt(payload, ctx.day)), config, ctx)
+        run_turn(graph, Command(resume=ask_to_remember(payload)), config, ctx)
         return
     notice = graph.get_state(config).values.get("notice")
+    if notice and notice.startswith("Saved.") and (entry := entry_repo.get_entry(ctx.conn, ctx.day)):
+        console.print(render_entry(entry, ctx.day))  # saved without asking: show what was written
     if notice:
-        good = notice.startswith(("Saved.", "Remembered")) and "Couldn't" not in notice
+        good = notice.startswith(("Saved.", "Remembered", "Noted")) and "Couldn't" not in notice
         console.print(f"[green]{notice}[/green]" if good else f"[dim]{notice}[/dim]")
 
 
@@ -111,14 +103,17 @@ def chat():
         vectors=vector_repo.open_store(),
         day=day,
         model_name=settings.chat_model,
-        memory_extractor=memory_service.build_memory_extractor(get_extraction_model()),
+        extractors=build_runnables(get_extraction_model()),
     )
-    graph = build_graph(open_checkpointer(), memory_repo.open_store())
+    store = memory_repo.open_store()
+    graph = build_graph(open_checkpointer(), store)
     config = thread_config(day)
     console.print(
         f"[dim]model: {settings.chat_model} - /checkin guided questions, /save write the entry, "
         "/cancel stop a check-in, exit quit[/dim]"
     )
+    if summary_line := recap(ctx.conn, store):  # saves are unattended: show what the last one wrote
+        console.print(f"[dim]{summary_line}[/dim]")
 
     messages = graph.get_state(config).values.get("messages", [])
     if messages:
@@ -131,7 +126,7 @@ def chat():
 
     try:
         if (payload := pending_interrupt(graph, config)) is not None:
-            run_turn(graph, Command(resume=answer_interrupt(payload, day)), config, ctx)
+            run_turn(graph, Command(resume=ask_to_remember(payload)), config, ctx)
         while True:
             # lstrip BOM: PowerShell prepends U+FEFF when piping text into a program.
             user_input = console.input("[bold cyan]you[/bold cyan]: ").lstrip("﻿").strip()
@@ -288,6 +283,57 @@ def memory_add(
     memory = Memory(id=memory_repo.new_id(), kind=kind, content=content, evidence=content, source_date=date.today())
     memory_repo.put_memory(memory_repo.open_store(), memory)
     console.print(f"[green]Remembered[/green] ({memory.id}).")
+
+
+people_app = typer.Typer(help="People you've mentioned in your journal.", no_args_is_help=True)
+app.add_typer(people_app, name="people")
+
+
+@people_app.command("list")
+def people_list():
+    """List the people noted from your entries."""
+    people = people_repo.list_people(entry_repo.connect())
+    if not people:
+        console.print("[dim]Nobody noted yet. Mention someone in 'diary chat' and /save.[/dim]")
+        return
+    table = Table("name", "relation", "facts", "first seen", "last seen")
+    for p in people:
+        table.add_row(p.name, p.relation, ", ".join(p.facts), p.first_seen.isoformat(), p.last_seen.isoformat())
+    console.print(table)
+
+
+@people_app.command("show")
+def people_show(name: str = typer.Argument(..., help="As shown by 'diary people list'.")):
+    """Show one person and every day they came up."""
+    conn = entry_repo.connect()
+    person = people_repo.get_person(conn, name)
+    if person is None:
+        console.print(f"[dim]Nobody called {name}.[/dim]")
+        raise typer.Exit(1)
+    facts = ", ".join(person.facts) or "no details yet"
+    console.print(f"[bold]{person.name}[/bold] ({person.relation}): {facts}")
+    table = Table("date", "what happened")
+    for m in people_repo.mentions_for(conn, person.id):
+        table.add_row(m.entry_date.isoformat(), m.what_happened)
+    console.print(table)
+
+
+@people_app.command("forget")
+def people_forget(
+    name: str = typer.Argument(..., help="As shown by 'diary people list'."),
+    fact: str = typer.Option(None, "--fact", help="Remove only this fact and keep the person."),
+):
+    """Delete a person and their mentions, or just one fact about them (--fact)."""
+    if fact is not None:
+        if not people_repo.remove_fact(entry_repo.connect(), name, fact):
+            console.print(f"[dim]No fact '{fact}' for {name}.[/dim]")
+            raise typer.Exit(1)
+        console.print("[green]Fact forgotten.[/green]")
+        return
+    if not people_repo.delete_person(entry_repo.connect(), name):
+        console.print(f"[dim]Nobody called {name}.[/dim]")
+        raise typer.Exit(1)
+    console.print("[green]Forgotten.[/green]")
 
 
 @app.command()

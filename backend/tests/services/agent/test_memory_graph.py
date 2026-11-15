@@ -1,6 +1,8 @@
-"""M6 through the graph: remember_fact, update_memory after a save, and memory in the prompt.
+"""Memory through the graph: remember_fact (confirmed), the save-time memory extractor
+(unattended), and memory in the prompt.
 Same fakes as test_graph.py, plus an in-memory store compiled into the graph."""
 
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -14,7 +16,13 @@ from diary_agent.models.memory import Memory, MemoryCandidates, MemoryItem
 from diary_agent.repositories import entry_repository as entry_repo
 from diary_agent.repositories import memory_repository as memory_repo
 from diary_agent.repositories import vector_repository as vector_repo
-from diary_agent.services.agent.graph import build_graph, open_checkpointer, pending_interrupt, thread_config
+from diary_agent.services.agent.graph import (
+    build_graph,
+    open_checkpointer,
+    pending_interrupt,
+    stream_turn,
+    thread_config,
+)
 from diary_agent.services.agent.state import DiaryContext
 
 DAY = date(2026, 10, 19)
@@ -22,7 +30,7 @@ CONFIG = thread_config(DAY)
 ENTRY = ExtractedEntry(
     highlights=["dinner"], challenges=[], gratitude=[], mood_words=[], mood=7, tags=[], summary="You ate well."
 )
-SISTER = MemoryItem(evidence="my sister Mia", kind="person", content="Sister named Mia")
+MARATHON = MemoryItem(evidence="I'm training for a marathon", kind="goal", content="Training for a marathon")
 
 
 def tool_call(name: str, call_id: str = "c1", **args) -> AIMessage:
@@ -51,7 +59,7 @@ def make_ctx(tmp_path, embeddings, chat_model_cls):
             vectors=vectors,
             day=day,
             model_name="fake",
-            memory_extractor=structured(MemoryCandidates(memories=list(memories))),
+            extractors={"memory": structured(MemoryCandidates(memories=list(memories)))},
         )
 
     return make
@@ -105,28 +113,32 @@ def test_known_fact_skips_confirmation(graph, store, make_ctx):
     assert state["messages"][2].content.startswith("Already remembered")
 
 
-def test_save_then_update_memory_proposes_lasting_facts(graph, store, make_ctx):
-    ctx = make_ctx(memories=[SISTER])
-    say(graph, ctx, "Had dinner with my sister Mia.")
-    say(graph, ctx, "/save")
-    resume(graph, ctx, True)  # save the entry
+def test_save_writes_lasting_facts_without_asking(graph, store, make_ctx):
+    ctx = make_ctx(memories=[MARATHON])
+    say(graph, ctx, "I'm training for a marathon.")
+    state = say(graph, ctx, "/save")
+    assert pending_interrupt(graph, CONFIG) is None
     assert entry_repo.get_entry(ctx.conn, DAY) is not None
-    [proposal] = pending_interrupt(graph, CONFIG)["proposals"]
-    assert proposal["action"] == "add" and proposal["tool_call_id"] is None
-
-    state = resume(graph, ctx, [True])
-    assert [m.content for m in memory_repo.list_memories(store)] == ["Sister named Mia"]
+    assert [m.content for m in memory_repo.list_memories(store)] == ["Training for a marathon"]
     assert state["notice"] == "Saved. Remembered 1 thing."
-    assert state["messages"][-1].type == "ai"  # no extra reply after a session-end memory update
+    assert state["messages"][-1].type == "ai"  # no extra reply after a save-time memory write
 
 
-def test_update_memory_drops_ungrounded_candidates(graph, store, make_ctx):
+def test_save_drops_person_memories(graph, store, make_ctx):
+    sister = MemoryItem(evidence="my sister Mia", kind="person", content="Sister named Mia")
+    ctx = make_ctx(memories=[sister])
+    say(graph, ctx, "Had dinner with my sister Mia.")
+    state = say(graph, ctx, "/save")
+    assert memory_repo.list_memories(store) == []
+    assert state["notice"] == "Saved."
+
+
+def test_save_drops_ungrounded_candidates(graph, store, make_ctx):
     invented = MemoryItem(evidence="I adore my cat", kind="fact", content="Has a cat")
     ctx = make_ctx(memories=[invented])
     say(graph, ctx, "Had dinner with my sister Mia.")
-    say(graph, ctx, "/save")
-    state = resume(graph, ctx, True)
-    assert pending_interrupt(graph, CONFIG) is None
+    state = say(graph, ctx, "/save")
+    assert memory_repo.list_memories(store) == []
     assert state["notice"] == "Saved."
 
 
@@ -134,13 +146,18 @@ def test_memory_failure_does_not_undo_the_save(graph, make_ctx):
     def broken(_):
         raise ConnectionError("ollama is down")
 
-    from dataclasses import replace
-    ctx = replace(make_ctx(), memory_extractor=RunnableLambda(broken))
+    ctx = replace(make_ctx(), extractors={"memory": RunnableLambda(broken)})
     say(graph, ctx, "Had dinner with my sister Mia.")
-    say(graph, ctx, "/save")
-    state = resume(graph, ctx, True)
+    state = say(graph, ctx, "/save")
     assert entry_repo.get_entry(ctx.conn, DAY) is not None
-    assert "Couldn't check for things to remember" in state["notice"]
+    assert state["notice"] == "Saved. (Couldn't check for memory.)"
+
+
+def test_save_status_is_streamed_when_extractors_exist(graph, make_ctx):
+    ctx = make_ctx(memories=[])
+    list(stream_turn(graph, {"user_input": "Hi"}, CONFIG, ctx))
+    events = list(stream_turn(graph, {"user_input": "/save"}, CONFIG, ctx))
+    assert ("status", "Noting people and things to remember...") in events
 
 
 def test_memories_reach_the_prompt_on_another_day(graph, store, make_ctx, chat_model_cls):
